@@ -84,24 +84,34 @@ const displayStreak = async () => {
         
         let streak = 0;
         let questionsToday = 0;
-        let lastActivityDate = null;
+        let lastStreakDate = null;
+        let questionsTodayDate = null;
 
         if (docSnap.exists()) {
             const data = docSnap.data();
             streak = data.streak || 0;
-            if (data.lastActivityDate) {
-                lastActivityDate = data.lastActivityDate.toDate();
-                if (isSameDay(lastActivityDate, new Date())) {
-                    questionsToday = data.questionsToday || 0;
-                }
+            lastStreakDate = data.lastStreakDate?.toDate();
+            questionsTodayDate = data.questionsTodayDate?.toDate();
+            
+            // Auto-reset streak if a day was missed
+            const today = new Date();
+            const yesterday = new Date();
+            yesterday.setDate(today.getDate() - 1);
+            if (lastStreakDate && !isSameDay(lastStreakDate, today) && !isSameDay(lastStreakDate, yesterday)) {
+                streak = 0;
+            }
+
+            // Reset daily question count if it's a new day
+            if (questionsTodayDate && isSameDay(questionsTodayDate, today)) {
+                questionsToday = data.questionsToday || 0;
             }
         }
         
         streakCountDisplay.textContent = `${streak} Gün`;
         streakProgressText.textContent = `Bugünkü Hedef: ${questionsToday} / ${DAILY_GOAL}`;
 
-        // Update card style based on streak
-        if (streak > 0) {
+        // Update card style based on today's goal completion, not the streak itself
+        if (questionsToday >= DAILY_GOAL) {
             streakContainer.classList.remove('inactive');
         } else {
             streakContainer.classList.add('inactive');
@@ -121,46 +131,47 @@ const updateStreak = async (questionsAnswered) => {
         const docSnap = await getDoc(statsRef);
         let currentStreak = 0;
         let questionsToday = 0;
-        let lastActivityDate = null;
+        let lastStreakDate = null;
+        let questionsTodayDate = null;
 
         if (docSnap.exists()) {
             const data = docSnap.data();
             currentStreak = data.streak || 0;
-            if (data.lastActivityDate) {
-                lastActivityDate = data.lastActivityDate.toDate();
-            }
+            lastStreakDate = data.lastStreakDate?.toDate();
+            questionsTodayDate = data.questionsTodayDate?.toDate();
+            
             // Reset daily count if the last activity was before today
-            if (lastActivityDate && !isSameDay(lastActivityDate, today)) {
+            if (questionsTodayDate && !isSameDay(questionsTodayDate, today)) {
                 questionsToday = 0;
             } else {
                 questionsToday = data.questionsToday || 0;
             }
         }
 
+        const goalMetBefore = questionsToday >= DAILY_GOAL;
         questionsToday += questionsAnswered;
+        const goalMetAfter = questionsToday >= DAILY_GOAL;
 
-        // Check if goal was met for the first time today
-        if (questionsToday >= DAILY_GOAL && (!lastActivityDate || !isSameDay(lastActivityDate, today))) {
-            const yesterday = new Date(today);
+        const dataToUpdate = {
+            questionsToday: questionsToday,
+            questionsTodayDate: Timestamp.fromDate(today)
+        };
+
+        // If the goal was just met for the first time today
+        if (goalMetAfter && !goalMetBefore) {
+            const yesterday = new Date();
             yesterday.setDate(today.getDate() - 1);
 
-            if (lastActivityDate && isSameDay(lastActivityDate, yesterday)) {
+            if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
                 currentStreak++; // Increment streak
             } else {
                 currentStreak = 1; // Start a new streak
             }
-            
-            // Only update lastActivityDate when the streak is earned
-            await setDoc(statsRef, {
-                streak: currentStreak,
-                questionsToday: questionsToday,
-                lastActivityDate: Timestamp.fromDate(today)
-            }, { merge: true });
-
-        } else {
-            // Goal not met yet, or already met today, just update daily count
-            await setDoc(statsRef, { questionsToday: questionsToday }, { merge: true });
+            dataToUpdate.streak = currentStreak;
+            dataToUpdate.lastStreakDate = Timestamp.fromDate(today);
         }
+        
+        await setDoc(statsRef, dataToUpdate, { merge: true });
 
     } catch (error) {
         console.error("Error updating streak: ", error);
