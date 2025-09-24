@@ -1130,7 +1130,65 @@ addUnitBtn.addEventListener('click', async () => {
 });
 
 // --- App Initialization ---
-const initializeApp = () => {
+
+const migrateOldData = async () => {
+    try {
+        const coursesQuery = query(collection(db, 'courses'));
+        const coursesSnapshot = await getDocs(coursesQuery);
+        
+        const oldUnitsQuery = query(collection(db, 'units'));
+        const oldUnitsSnapshot = await getDocs(oldUnitsQuery);
+
+        // If courses collection is empty AND old units collection has documents, then migrate.
+        if (coursesSnapshot.empty && !oldUnitsSnapshot.empty) {
+            console.log("Eski veriler algılandı, taşıma işlemi başlatılıyor...");
+            alert("Önceki verileriniz yeni Dersler yapısına taşınıyor. Bu işlem bir defaya mahsus çalışacaktır.");
+
+            // 1. Create a new course to house the old units
+            const courseRef = await addDoc(collection(db, 'courses'), {
+                name: "Eski Tarih Dersim",
+                createdAt: new Date()
+            });
+            const newCourseId = courseRef.id;
+
+            // 2. Use batch writes for efficiency
+            const batch = writeBatch(db);
+
+            for (const unitDoc of oldUnitsSnapshot.docs) {
+                const oldUnitData = unitDoc.data();
+                const oldUnitId = unitDoc.id;
+                
+                // Create a new ref for the unit in its new location
+                const newUnitRef = doc(collection(db, `courses/${newCourseId}/units`));
+                
+                // Copy the unit data to the new location
+                batch.set(newUnitRef, oldUnitData);
+
+                // 3. Get all notes from the old unit's subcollection
+                const oldNotesSnapshot = await getDocs(collection(db, `units/${oldUnitId}/notes`));
+                
+                for (const noteDoc of oldNotesSnapshot.docs) {
+                    const oldNoteData = noteDoc.data();
+                    // Create a new ref for the note in its new deep location
+                    const newNoteRef = doc(collection(db, `courses/${newCourseId}/units/${newUnitRef.id}/notes`));
+                    batch.set(newNoteRef, oldNoteData);
+                }
+            }
+
+            // 4. Commit the batch
+            await batch.commit();
+
+            alert("Taşıma tamamlandı! Eski üniteleriniz 'Eski Tarih Dersim' dersinin altına eklendi.");
+            console.log("Veri taşıma başarılı.");
+        }
+    } catch (error) {
+        console.error("Veri taşıma sırasında bir hata oluştu: ", error);
+        alert("Eski verileriniz taşınırken bir hata oluştu. Lütfen konsolu kontrol edin.");
+    }
+};
+
+const initializeApp = async () => {
+    await migrateOldData(); // Run migration check first
     displayCourses();
     showCoursesView();
     displayStreak();
