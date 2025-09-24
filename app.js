@@ -2,6 +2,14 @@ import { db } from './firebase-config.js';
 import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, writeBatch, deleteDoc, getDoc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
 // --- DOM Elements ---
+// Course elements
+const coursesContainer = document.getElementById('courses-container');
+const courseNameInput = document.getElementById('course-name-input');
+const addCourseBtn = document.getElementById('add-course-btn');
+const coursesListDiv = document.getElementById('courses-list');
+const selectedCourseTitle = document.getElementById('selected-course-title');
+const backToCoursesBtn = document.getElementById('back-to-courses-btn');
+
 // Unit elements
 const unitNameInput = document.getElementById('unit-name-input');
 const addUnitBtn = document.getElementById('add-unit-btn');
@@ -51,6 +59,8 @@ const streakProgressText = document.querySelector('#streak-container .progress-t
 
 
 // --- State Variables ---
+let selectedCourseId = null;
+let selectedCourseName = null;
 let selectedUnitId = null;
 let selectedUnitName = null;
 let selectedKeyword = ''; // To store the highlighted keyword
@@ -227,20 +237,24 @@ window.addEventListener('click', (event) => {
 
 // Global Random Review Event Listener
 randomReviewBtn.addEventListener('click', async () => {
+    if (!selectedCourseId) {
+        alert('Lütfen önce bir ders seçin.');
+        return;
+    }
     // Show a loading state or disable the button
     randomReviewBtn.textContent = 'Notlar Yükleniyor...';
     randomReviewBtn.disabled = true;
 
     try {
         const allNotes = [];
-        // 1. Get all units
-        const unitsSnapshot = await getDocs(collection(db, 'units'));
+        // 1. Get all units for the selected course
+        const unitsSnapshot = await getDocs(collection(db, `courses/${selectedCourseId}/units`));
         
         // 2. Create an array of promises to fetch notes from each unit
         const notesPromises = [];
         unitsSnapshot.forEach(unitDoc => {
             const unitId = unitDoc.id;
-            notesPromises.push(getDocs(collection(db, `units/${unitId}/notes`)));
+            notesPromises.push(getDocs(collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`)));
         });
 
         // 3. Wait for all note fetches to complete
@@ -250,7 +264,7 @@ randomReviewBtn.addEventListener('click', async () => {
         allNotesSnapshots.forEach((notesSnapshot, index) => {
             const unitId = unitsSnapshot.docs[index].id;
             notesSnapshot.forEach(doc => {
-                allNotes.push({ id: doc.id, unitId: unitId, ...doc.data() });
+                allNotes.push({ id: doc.id, unitId: unitId, courseId: selectedCourseId, ...doc.data() });
             });
         });
 
@@ -261,7 +275,7 @@ randomReviewBtn.addEventListener('click', async () => {
         randomReviewBtn.textContent = '20 Notluk Rastgele Test Başlat';
         randomReviewBtn.disabled = false;
         
-        // We need to clear selectedUnitId so the quiz summary returns to the main page
+        // We need to clear selectedUnitId so the quiz summary returns to the units page of the course
         selectedUnitId = null;
         selectedUnitName = null;
         
@@ -318,7 +332,7 @@ notesContainer.addEventListener('click', async (e) => {
         const type = button.dataset.type;
         const status = button.dataset.status;
 
-        const notesRef = collection(db, `units/${selectedUnitId}/notes`);
+        const notesRef = collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`);
         let notesQuery;
 
         if (type === 'critical') {
@@ -331,7 +345,7 @@ notesContainer.addEventListener('click', async (e) => {
             const snapshot = await getDocs(notesQuery);
             let notes = [];
             snapshot.forEach(doc => {
-                notes.push({ id: doc.id, unitId: selectedUnitId, ...doc.data() });
+                notes.push({ id: doc.id, unitId: selectedUnitId, courseId: selectedCourseId, ...doc.data() });
             });
 
             if (type !== 'critical' && type !== 'all') {
@@ -374,7 +388,7 @@ modalSaveBtn.addEventListener('click', async () => {
                     return;
                 }
             }
-            await updateDoc(doc(db, `units/${selectedUnitId}/notes`, id), { noteText: newText });
+            await updateDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, id), { noteText: newText });
         }
         closeEditModal();
     } catch (error) {
@@ -386,8 +400,8 @@ modalSaveBtn.addEventListener('click', async () => {
 
 // --- Confidence Level Decay Logic ---
 
-const checkAndUpdateConfidenceLevels = async (unitId) => {
-    const notesRef = collection(db, `units/${unitId}/notes`);
+const checkAndUpdateConfidenceLevels = async (courseId, unitId) => {
+    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
     const q = query(notesRef, where('status', '==', 'Ezberlenmiş'));
     const snapshot = await getDocs(q);
 
@@ -417,7 +431,7 @@ const checkAndUpdateConfidenceLevels = async (unitId) => {
         if (daysPassed > 0) {
             const decayAmount = daysPassed * 3;
             let newConfidence = Math.max(0, note.confidenceLevel - decayAmount);
-            const docRef = doc(db, `units/${unitId}/notes`, noteId);
+            const docRef = doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId);
 
             if (newConfidence < 15) {
                 batch.update(docRef, {
@@ -443,8 +457,8 @@ const checkAndUpdateConfidenceLevels = async (unitId) => {
 // --- CRUD Operations ---
 
 // Get Stats for a Unit
-const getUnitStats = async (unitId) => {
-    const notesRef = collection(db, `units/${unitId}/notes`);
+const getUnitStats = async (courseId, unitId) => {
+    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
     const snapshot = await getDocs(notesRef);
     const totalCount = snapshot.size;
     
@@ -459,12 +473,29 @@ const getUnitStats = async (unitId) => {
     };
 };
 
+// Delete Course
+const deleteCourse = async (courseId) => {
+    if (!confirm('Bu dersi ve içindeki tüm üniteleri/notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
+    try {
+        // This is complex. We need to delete all notes in all units, then all units, then the course.
+        const unitsSnapshot = await getDocs(collection(db, `courses/${courseId}/units`));
+        for (const unitDoc of unitsSnapshot.docs) {
+            await deleteUnit(courseId, unitDoc.id, false); // Call deleteUnit without confirmation
+        }
+        await deleteDoc(doc(db, 'courses', courseId));
+    } catch (error) {
+        console.error("Error deleting course: ", error);
+        alert('Ders silinirken bir hata oluştu.');
+    }
+};
+
+
 // Delete Unit
-const deleteUnit = async (unitId) => {
-    if (!confirm('Bu üniteyi ve içindeki tüm notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
+const deleteUnit = async (courseId, unitId, showConfirmation = true) => {
+    if (showConfirmation && !confirm('Bu üniteyi ve içindeki tüm notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
     try {
         // First, delete all notes in the subcollection
-        const notesSnapshot = await getDocs(collection(db, `units/${unitId}/notes`));
+        const notesSnapshot = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
         const deleteBatch = writeBatch(db);
         notesSnapshot.forEach(doc => {
             deleteBatch.delete(doc.ref);
@@ -472,7 +503,7 @@ const deleteUnit = async (unitId) => {
         await deleteBatch.commit();
         
         // Then, delete the unit itself
-        await deleteDoc(doc(db, 'units', unitId));
+        await deleteDoc(doc(db, `courses/${courseId}/units`, unitId));
     } catch (error) {
         console.error("Error deleting unit: ", error);
         alert('Ünite silinirken bir hata oluştu.');
@@ -483,7 +514,7 @@ const deleteUnit = async (unitId) => {
 const deleteNote = async (noteId) => {
     if (!confirm('Bu notu silmek istediğinizden emin misiniz?')) return;
     try {
-        await deleteDoc(doc(db, `units/${selectedUnitId}/notes`, noteId));
+        await deleteDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, noteId));
     } catch (error) {
         console.error("Error deleting note: ", error);
         alert('Not silinirken bir hata oluştu.');
@@ -502,10 +533,10 @@ noteTextInput.addEventListener('mouseup', () => {
     }
 });
 
-const updateNoteStatus = async (unitId, noteId, newStatus, newConfidence, newStats = null) => {
-    if (!unitId || !noteId) return;
+const updateNoteStatus = async (courseId, unitId, noteId, newStatus, newConfidence, newStats = null) => {
+    if (!courseId || !unitId || !noteId) return;
 
-    const noteRef = doc(db, `units/${unitId}/notes`, noteId);
+    const noteRef = doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId);
     try {
         const updateData = {
             status: newStatus,
@@ -531,7 +562,7 @@ const displayNotes = (unitId) => {
         unsubscribeNotes();
     }
 
-    const notesQuery = query(collection(db, `units/${unitId}/notes`));
+    const notesQuery = query(collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`));
     
     unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
         unmemorizedNotesListDiv.innerHTML = '';
@@ -623,14 +654,14 @@ const displayNotes = (unitId) => {
             if (markMemorizedBtn) {
                 markMemorizedBtn.addEventListener('click', () => {
                     // Reset stats when moving to memorized
-                    updateNoteStatus(selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
+                    updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
                 });
             }
 
             const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
             if (testBtn) {
                 testBtn.addEventListener('click', () => {
-                    startQuizSession([{ id: noteId, unitId: selectedUnitId, ...note }]);
+                    startQuizSession([{ id: noteId, unitId: selectedUnitId, courseId: selectedCourseId, ...note }]);
                 });
             }
         });
@@ -663,7 +694,7 @@ addNoteBtn.addEventListener('click', async () => {
     const noteText = noteTextInput.value.trim();
     const category = noteCategoryInput.value.trim();
 
-    if (noteText && category && selectedKeyword && selectedUnitId) {
+    if (noteText && category && selectedKeyword && selectedCourseId && selectedUnitId) {
         // Check if the selected keyword is actually in the note text
         if (!noteText.includes(selectedKeyword)) {
             alert('Lütfen not metninin içinden bir anahtar kelime seçin.');
@@ -671,7 +702,7 @@ addNoteBtn.addEventListener('click', async () => {
         }
 
         try {
-            await addDoc(collection(db, `units/${selectedUnitId}/notes`), {
+            await addDoc(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), {
                 noteText: noteText,
                 keyword: selectedKeyword,
                 category: category,
@@ -700,7 +731,7 @@ addNoteBtn.addEventListener('click', async () => {
 
 const showNotesView = async (unitId, unitName) => {
     // First, check and update confidence levels before displaying notes
-    await checkAndUpdateConfidenceLevels(unitId);
+    await checkAndUpdateConfidenceLevels(selectedCourseId, unitId);
 
     selectedUnitId = unitId;
     selectedUnitName = unitName;
@@ -719,17 +750,40 @@ const showNotesView = async (unitId, unitName) => {
     displayNotes(unitId);
 };
 
-const showUnitsView = () => {
-    selectedUnitId = null;
-    selectedUnitName = null;
-    unitsContainer.style.display = 'block';
+const showUnitsView = (courseId, courseName) => {
+    selectedCourseId = courseId;
+    selectedCourseName = courseName;
+    selectedCourseTitle.textContent = `Ders: ${courseName}`;
+
+    coursesContainer.style.display = 'none';
     notesContainer.style.display = 'none';
     quizContainer.style.display = 'none';
+    unitsContainer.style.display = 'block';
+
     if (unsubscribeNotes) {
         unsubscribeNotes();
         unsubscribeNotes = null;
     }
+    displayUnits(courseId);
 };
+
+const showCoursesView = () => {
+    selectedCourseId = null;
+    selectedCourseName = null;
+    selectedUnitId = null;
+    selectedUnitName = null;
+
+    coursesContainer.style.display = 'block';
+    unitsContainer.style.display = 'none';
+    notesContainer.style.display = 'none';
+    quizContainer.style.display = 'none';
+
+    if (unsubscribeNotes) { // Also applies to unit listeners, which we will handle later
+        unsubscribeNotes();
+        unsubscribeNotes = null;
+    }
+};
+
 
 // --- Quiz Management ---
 
@@ -749,10 +803,12 @@ const displayCurrentQuizQuestion = async () => {
         backButton.textContent = 'Geri Dön';
         backButton.className = 'primary-btn';
         backButton.onclick = () => {
-            if (selectedUnitId) {
+            if (selectedUnitId) { // This means quiz was for a specific unit
                 showNotesView(selectedUnitId, selectedUnitName);
+            } else if (selectedCourseId) { // This means it was a random course quiz
+                showUnitsView(selectedCourseId, selectedCourseName);
             } else {
-                showUnitsView();
+                showCoursesView();
             }
         };
         quizOptions.appendChild(backButton);
@@ -775,7 +831,7 @@ const displayCurrentQuizQuestion = async () => {
     const correctKeywordLower = noteToTest.keyword.toLowerCase();
 
     // 1. Try to get from the same category first
-    const categoryQuery = query(collection(db, `units/${noteToTest.unitId}/notes`), where('category', '==', noteToTest.category));
+    const categoryQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`), where('category', '==', noteToTest.category));
     const categorySnapshot = await getDocs(categoryQuery);
     categorySnapshot.forEach(doc => {
         const keyword = doc.data().keyword;
@@ -786,7 +842,7 @@ const displayCurrentQuizQuestion = async () => {
 
     // 2. If not enough, get more from the entire unit
     if (distractors.size < 3) {
-        const unitQuery = query(collection(db, `units/${noteToTest.unitId}/notes`));
+        const unitQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`));
         const unitSnapshot = await getDocs(unitQuery);
         
         const existingOptionsLower = new Set([...distractors].map(d => d.toLowerCase()));
@@ -820,11 +876,11 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
         quizQueue[currentQuizIndex].correct = true;
         
         if (correctNote.status === 'Ezberlenmiş') {
-            updateNoteStatus(correctNote.unitId, correctNote.id, 'Ezberlenmiş', 100);
+            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmiş', 100);
         } else {
             const newCorrectCount = (correctNote.testCorrectCount || 0) + 1;
             const newIncorrectCount = correctNote.testIncorrectCount || 0;
-            updateNoteStatus(correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
+            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
         }
     } else {
         quizFeedback.textContent = `Yanlış. Doğru cevap: ${correctNote.keyword}.`;
@@ -833,11 +889,11 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
 
         if (correctNote.status === 'Ezberlenmiş') {
             const newConfidence = Math.max(0, correctNote.confidenceLevel - 25);
-            updateNoteStatus(correctNote.unitId, correctNote.id, 'Ezberlenmiş', newConfidence);
+            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmiş', newConfidence);
         } else {
             const newCorrectCount = correctNote.testCorrectCount || 0;
             const newIncorrectCount = (correctNote.testIncorrectCount || 0) + 1;
-            updateNoteStatus(correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
+            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
         }
     }
 
@@ -856,9 +912,79 @@ const startQuizSession = (notes) => {
 };
 
 
-backToUnitsBtn.addEventListener('click', showUnitsView);
+backToUnitsBtn.addEventListener('click', () => showUnitsView(selectedCourseId, selectedCourseName));
+backToCoursesBtn.addEventListener('click', showCoursesView);
 
 // --- UI Rendering ---
+
+const renderCourseCard = (courseId, course) => {
+    const courseElement = document.createElement('div');
+    courseElement.classList.add('unit-item'); // Reuse unit-item styling
+    courseElement.dataset.courseId = courseId;
+
+    courseElement.innerHTML = `
+        <div class="unit-item-header">
+            <span class="unit-name">${course.name}</span>
+            <div class="card-actions">
+                <button class="action-btn edit-course-btn" title="Dersi Düzenle">${editIconSVG}</button>
+                <button class="action-btn delete-course-btn" title="Dersi Sil">${deleteIconSVG}</button>
+            </div>
+        </div>
+    `;
+
+    courseElement.addEventListener('click', (e) => {
+        if (e.target.closest('.action-btn')) return;
+        showUnitsView(courseId, course.name);
+    });
+
+    courseElement.querySelector('.delete-course-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteCourse(courseId);
+    });
+
+    // TODO: Add edit course functionality
+    // courseElement.querySelector('.edit-course-btn').addEventListener('click', (e) => {
+    //     e.stopPropagation();
+    //     openEditModal('course', courseId, course);
+    // });
+
+    coursesListDiv.appendChild(courseElement);
+};
+
+const updateCourseCard = (courseId, course) => {
+    const courseElement = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
+    if (courseElement) {
+        const courseNameEl = courseElement.querySelector('.unit-name');
+        if (courseNameEl) {
+            courseNameEl.textContent = course.name;
+        }
+    }
+};
+
+const removeCourseCard = (courseId) => {
+    const courseElement = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
+    if (courseElement) {
+        courseElement.remove();
+    }
+};
+
+const displayCourses = () => {
+    const coursesCollection = collection(db, 'courses');
+    onSnapshot(coursesCollection, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+                renderCourseCard(change.doc.id, change.doc.data());
+            }
+            if (change.type === "modified") {
+                // updateCourseCard(change.doc.id, change.doc.data());
+            }
+            if (change.type === "removed") {
+                removeCourseCard(change.doc.id);
+            }
+        });
+    });
+};
+
 
 const renderUnitCard = (unitId, unit) => {
     const unitElement = document.createElement('div');
@@ -898,7 +1024,7 @@ const renderUnitCard = (unitId, unit) => {
 
     unitElement.querySelector('.delete-unit-btn').addEventListener('click', (e) => {
         e.stopPropagation();
-        deleteUnit(unitId);
+        deleteUnit(selectedCourseId, unitId);
     });
 
     unitElement.querySelector('.edit-unit-btn').addEventListener('click', (e) => {
@@ -909,7 +1035,7 @@ const renderUnitCard = (unitId, unit) => {
     unitsListDiv.appendChild(unitElement);
 
     // Asynchronously fetch stats and update the card
-    getUnitStats(unitId).then(stats => {
+    getUnitStats(selectedCourseId, unitId).then(stats => {
         // Make sure the card is still in the DOM
         const existingCard = unitsListDiv.querySelector(`[data-unit-id="${unitId}"]`);
         if (existingCard) {
@@ -949,9 +1075,16 @@ const removeUnitCard = (unitId) => {
     }
 };
 
-const displayUnits = () => {
-    const unitsCollection = collection(db, 'units');
-    onSnapshot(unitsCollection, (snapshot) => {
+let unsubscribeUnits = null;
+
+const displayUnits = (courseId) => {
+    if (unsubscribeUnits) {
+        unsubscribeUnits();
+    }
+    unitsListDiv.innerHTML = ''; // Clear previous units
+
+    const unitsCollection = collection(db, `courses/${courseId}/units`);
+    unsubscribeUnits = onSnapshot(unitsCollection, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
                 renderUnitCard(change.doc.id, change.doc.data());
@@ -966,11 +1099,26 @@ const displayUnits = () => {
     });
 };
 
+addCourseBtn.addEventListener('click', async () => {
+    const courseName = courseNameInput.value.trim();
+    if (courseName) {
+        try {
+            await addDoc(collection(db, 'courses'), {
+                name: courseName,
+                createdAt: new Date()
+            });
+            courseNameInput.value = ''; 
+        } catch (error) {
+            console.error("Error adding course: ", error);
+        }
+    }
+});
+
 addUnitBtn.addEventListener('click', async () => {
     const unitName = unitNameInput.value.trim();
-    if (unitName) {
+    if (unitName && selectedCourseId) {
         try {
-            await addDoc(collection(db, 'units'), {
+            await addDoc(collection(db, `courses/${selectedCourseId}/units`), {
                 name: unitName,
                 createdAt: new Date()
             });
@@ -983,8 +1131,8 @@ addUnitBtn.addEventListener('click', async () => {
 
 // --- App Initialization ---
 const initializeApp = () => {
-    displayUnits();
-    showUnitsView();
+    displayCourses();
+    showCoursesView();
     displayStreak();
 };
 
