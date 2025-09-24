@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tarih Öğrenme Uygulaması</title>
+    <title>Bilgi Kartı Uygulaması</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,8 +25,22 @@
     </header>
 
     <main id="app">
-        <div id="units-container">
-            <h2>Üniteler</h2>
+        <div id="courses-container">
+            <h2>Dersler</h2>
+            <div class="controls">
+                <input type="text" id="course-name-input" placeholder="Yeni ders adı...">
+                <button id="add-course-btn" class="primary-btn">Ders Ekle</button>
+            </div>
+            <div id="courses-list"></div>
+        </div>
+
+        <div id="units-container" style="display: none;">
+             <div class="units-header">
+                <button id="back-to-courses-btn" class="secondary-btn">&larr; Derslere Geri Dön</button>
+                <div class="header-content">
+                    <h2 id="selected-course-title"></h2>
+                </div>
+            </div>
             <div class="controls">
                 <input type="text" id="unit-name-input" placeholder="Yeni ünite adı...">
                 <button id="add-unit-btn" class="primary-btn">Ünite Ekle</button>
@@ -34,8 +48,8 @@
 
             <div class="top-controls-container">
                 <div class="global-review-controls">
-                    <h3>Rastgele Tekrar</h3>
-                    <p>Tüm ünitelerdeki notlardan rastgele bir test başlatın.</p>
+                    <h3>Derse Özel Rastgele Tekrar</h3>
+                    <p>Bu dersteki tüm ünitelerden rastgele bir test başlatın.</p>
                     <button id="random-review-btn" class="secondary-btn">20 Notluk Rastgele Test Başlat</button>
                 </div>
                 <div id="streak-container" class="streak-card">
