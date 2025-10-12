@@ -1,6 +1,11 @@
 import { db } from './firebase-config.js';
 import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, writeBatch, deleteDoc, getDoc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
+// --- Gemini AI Config ---
+const GEMINI_API_KEY = "AIzaSyCKt0z_CYh9qJ5giYGtiyefv7dQRY822L8";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+
+
 // --- DOM Elements ---
 // Course elements
 const coursesContainer = document.getElementById('courses-container');
@@ -57,6 +62,13 @@ const streakContainer = document.getElementById('streak-container');
 const streakCountDisplay = document.querySelector('#streak-container .streak-count');
 const streakProgressText = document.querySelector('#streak-container .progress-text');
 
+// AI Chat Modal elements
+const aiChatModal = document.getElementById('ai-chat-modal');
+const aiChatHistory = document.getElementById('ai-chat-history');
+const aiChatInput = document.getElementById('ai-chat-input');
+const aiSendBtn = document.getElementById('ai-send-btn');
+const aiChatCloseBtn = aiChatModal.querySelector('.close-btn');
+
 
 // --- State Variables ---
 let selectedCourseId = null;
@@ -66,6 +78,7 @@ let selectedUnitName = null;
 let selectedKeyword = ''; // To store the highlighted keyword
 let unsubscribeNotes = null; // To stop listening to previous unit's notes
 let currentEdit = { type: null, id: null, originalData: null }; // To manage what we are editing
+let currentAiChatNote = null; // To store context for AI chat
 let quizQueue = [];
 let currentQuizIndex = 0;
 
@@ -192,6 +205,8 @@ const updateStreak = async (questionsAnswered) => {
 // --- SVG Icons ---
 const editIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
 const deleteIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
+const aiIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1.2 0-2.4.6-3 1.7A3.5 3.5 0 0 0 3.5 8c0 2.2 1.8 4 4 4h9c2.2 0 4-1.8 4-4s-1.8-4-4-4c-.5 0-1 .1-1.5.3A3.5 3.5 0 0 0 12 3z"></path><path d="M12 12v9"></path><path d="m9 21 6-6"></path></svg>`;
+
 
 // --- Theme Management ---
 const setTheme = (theme) => {
@@ -234,6 +249,82 @@ window.addEventListener('click', (event) => {
         closeEditModal();
     }
 });
+
+// --- AI Chat Modal Management ---
+const openAiChatModal = (noteText) => {
+    currentAiChatNote = noteText;
+    aiChatHistory.innerHTML = `<div class="system-message">Bu not hakkında sohbet et: "<strong>${noteText}</strong>"</div>`;
+    aiChatInput.value = '';
+    aiChatModal.style.display = 'block';
+    aiChatInput.focus();
+};
+
+const closeAiChatModal = () => {
+    aiChatModal.style.display = 'none';
+    currentAiChatNote = null;
+};
+
+const appendToChatHistory = (html) => {
+    aiChatHistory.innerHTML += html;
+    aiChatHistory.scrollTop = aiChatHistory.scrollHeight; // Auto-scroll to bottom
+};
+
+const handleAiChatSend = async () => {
+    const userInput = aiChatInput.value.trim();
+    if (!userInput || !currentAiChatNote) return;
+
+    aiChatInput.value = ''; // Clear input
+    appendToChatHistory(`<div class="chat-message user-message">${userInput}</div>`);
+    
+    const loadingId = `loading-${Date.now()}`;
+    appendToChatHistory(`<div class="chat-message ai-message ai-loading" id="${loadingId}">Y. Zeka düşünüyor...</div>`);
+    
+    const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". Bu nota dayanarak aşağıdaki soruyu cevapla: "${userInput}"`;
+
+    try {
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }]
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API hatası: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const aiResponse = data.candidates[0].content.parts[0].text;
+        
+        const loadingElement = document.getElementById(loadingId);
+        loadingElement.classList.remove('ai-loading');
+        loadingElement.textContent = aiResponse;
+
+    } catch (error) {
+        console.error("Gemini API Error:", error);
+        const loadingElement = document.getElementById(loadingId);
+        loadingElement.classList.remove('ai-loading');
+        loadingElement.textContent = "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.";
+    }
+};
+
+
+aiChatCloseBtn.addEventListener('click', closeAiChatModal);
+aiSendBtn.addEventListener('click', handleAiChatSend);
+aiChatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleAiChatSend();
+    }
+});
+window.addEventListener('click', (event) => {
+    if (event.target == aiChatModal) {
+        closeAiChatModal();
+    }
+});
+
+
 
 // Global Random Review Event Listener
 randomReviewBtn.addEventListener('click', async () => {
@@ -645,6 +736,7 @@ const displayNotes = (unitId) => {
                     </div>
                 </div>
                 <div class="card-actions">
+                    <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
                     <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
                     <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
                 </div>
@@ -668,6 +760,11 @@ const displayNotes = (unitId) => {
             noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
                 e.stopPropagation();
                 openEditModal('note', noteId, note);
+            });
+            
+            noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                openAiChatModal(note.noteText);
             });
 
             const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
