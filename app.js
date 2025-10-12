@@ -1,10 +1,12 @@
 import { db } from './firebase-config.js';
 import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, writeBatch, deleteDoc, getDoc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+// HATA DÜZELTMESİ: Google'ın resmi Web SDK'sı import edildi.
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // --- Gemini AI Config ---
 const GEMINI_API_KEY = "AIzaSyCKt0z_CYh9qJ5giYGtiyefv7dQRY822L8";
-// HATA DÜZELTMESİ: API URL'si v1beta'dan v1'e güncellendi.
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+// HATA DÜZELTMESİ: Eski API URL'si kaldırıldı, yerine SDK istemcisi oluşturuldu.
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 
 // --- DOM Elements ---
@@ -280,23 +282,14 @@ const handleAiChatSend = async () => {
     const loadingId = `loading-${Date.now()}`;
     appendToChatHistory(`<div class="chat-message ai-message ai-loading" id="${loadingId}">Y. Zeka düşünüyor...</div>`);
     
-    const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". Bu nota dayanarak aşağıdaki soruyu cevapla: "${userInput}"`;
-
     try {
-        const response = await fetch(GEMINI_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
-        });
+        // HATA DÜZELTMESİ: SDK kullanılarak model ve prompt oluşturuldu.
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". Bu nota dayanarak aşağıdaki soruyu cevapla: "${userInput}"`;
 
-        if (!response.ok) {
-            throw new Error(`API hatası: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const aiResponse = data.candidates[0].content.parts[0].text;
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const aiResponse = response.text();
         
         const loadingElement = document.getElementById(loadingId);
         loadingElement.classList.remove('ai-loading');
@@ -306,7 +299,7 @@ const handleAiChatSend = async () => {
         console.error("Gemini API Error:", error);
         const loadingElement = document.getElementById(loadingId);
         loadingElement.classList.remove('ai-loading');
-        loadingElement.textContent = "Üzgünüm, bir hata oluştu. Lütfen tekrar deneyin.";
+        loadingElement.textContent = "Üzgünüm, bir hata oluştu. API anahtarını veya model adını kontrol edin.";
     }
 };
 
