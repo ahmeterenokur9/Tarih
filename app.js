@@ -285,7 +285,7 @@ const handleAiChatSend = async () => {
     try {
         // HATA DÜZELTMESİ: SDK kullanılarak model ve prompt oluşturuldu.
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". Bu nota dayanarak aşağıdaki soruyu cevapla: "${userInput}"`;
+        const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". kullanıcı kendisi bu notu ekledi ve şimdi sana bir mesajı var mesajını cevapla amacın kullanacının öğrenme yolculuğunda ona yardımcı olmak ve bilgileri ve tarihi akışı öğrenmesini kolaylaştırmak: "${userInput}"`;
 
         const result = await model.generateContent(prompt);
         const response = await result.response;
