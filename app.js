@@ -3,7 +3,8 @@ import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, 
 
 // --- Gemini AI Config ---
 const GEMINI_API_KEY = "AIzaSyCKt0z_CYh9qJ5giYGtiyefv7dQRY822L8";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
+// HATA DÜZELTMESİ: API URL'si v1beta'dan v1'e güncellendi.
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
 
 
 // --- DOM Elements ---
