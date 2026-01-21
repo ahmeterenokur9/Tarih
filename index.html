@@ -1,159 +1,213 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bilgi Kartı Uygulaması</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+import { db } from './firebase-config.js';
+import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, deleteDoc, getDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
-    <header class="app-header">
-        <div class="logo">
-            <h1>Bilgi Kartları</h1>
+// --- Gemini AI Config ---
+const GEMINI_API_KEY = "AIzaSyCKt0z_CYh9qJ5giYGtiyefv7dQRY822L8";
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+// --- DOM Elements ---
+const coursesContainer = document.getElementById('courses-container');
+const coursesListDiv = document.getElementById('courses-list');
+const unitsContainer = document.getElementById('units-container');
+const unitsListDiv = document.getElementById('units-list');
+const notesContainer = document.getElementById('notes-container');
+const notesListDiv = document.getElementById('notes-list');
+
+const courseNameInput = document.getElementById('course-name-input');
+const unitNameInput = document.getElementById('unit-name-input');
+const noteTextInput = document.getElementById('note-text-input');
+const noteCategoryInput = document.getElementById('note-category-input');
+const searchNotesInput = document.getElementById('search-notes');
+
+const selectedCourseTitle = document.getElementById('selected-course-title');
+const selectedUnitTitle = document.getElementById('selected-unit-title');
+const selectedKeywordDisplay = document.getElementById('selected-keyword-display');
+
+// --- State ---
+let selectedCourseId = null;
+let selectedUnitId = null;
+let selectedKeyword = '';
+let unsubscribeNotes = null;
+let currentEdit = { type: null, id: null, originalData: null };
+let currentAiChatNote = null;
+
+// --- Icons ---
+const editIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
+const deleteIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+const aiIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1.2 0-2.4.6-3 1.7A3.5 3.5 0 0 0 3.5 8c0 2.2 1.8 4 4 4h9c2.2 0 4-1.8 4-4s-1.8-4-4-4c-.5 0-1 .1-1.5.3A3.5 3.5 0 0 0 12 3z"></path><path d="M12 12v9"></path><path d="m9 21 6-6"></path></svg>`;
+
+// --- Navigation ---
+const showCourses = () => {
+    coursesContainer.style.display = 'block';
+    unitsContainer.style.display = 'none';
+    notesContainer.style.display = 'none';
+};
+
+const showUnits = (courseId, courseName) => {
+    selectedCourseId = courseId;
+    selectedCourseTitle.textContent = courseName;
+    coursesContainer.style.display = 'none';
+    unitsContainer.style.display = 'block';
+    notesContainer.style.display = 'none';
+    displayUnits();
+};
+
+const showNotes = (unitId, unitName) => {
+    selectedUnitId = unitId;
+    selectedUnitTitle.textContent = unitName;
+    unitsContainer.style.display = 'none';
+    notesContainer.style.display = 'block';
+    displayNotes();
+};
+
+// --- Display Functions ---
+const displayCourses = () => {
+    onSnapshot(query(collection(db, 'courses'), orderBy('createdAt', 'desc')), (snapshot) => {
+        coursesListDiv.innerHTML = '';
+        snapshot.forEach(doc => {
+            const course = doc.data();
+            const div = document.createElement('div');
+            div.className = 'course-card';
+            div.innerHTML = `<div class="course-card-header"><span class="course-name">${course.name}</span></div>`;
+            div.onclick = () => showUnits(doc.id, course.name);
+            coursesListDiv.appendChild(div);
+        });
+    });
+};
+
+const displayUnits = () => {
+    onSnapshot(query(collection(db, `courses/${selectedCourseId}/units`), orderBy('createdAt', 'desc')), (snapshot) => {
+        unitsListDiv.innerHTML = '';
+        snapshot.forEach(doc => {
+            const unit = doc.data();
+            const div = document.createElement('div');
+            div.className = 'unit-item';
+            div.innerHTML = `<span class="unit-name">${unit.name}</span>`;
+            div.onclick = () => showNotes(doc.id, unit.name);
+            unitsListDiv.appendChild(div);
+        });
+    });
+};
+
+const displayNotes = () => {
+    if (unsubscribeNotes) unsubscribeNotes();
+    const q = query(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), orderBy('createdAt', 'desc'));
+    
+    unsubscribeNotes = onSnapshot(q, (snapshot) => {
+        notesListDiv.innerHTML = '';
+        snapshot.forEach(docSnap => {
+            renderNoteCard(docSnap.id, docSnap.data());
+        });
+    });
+};
+
+const renderNoteCard = (id, data) => {
+    const div = document.createElement('div');
+    div.className = 'note-item';
+    div.innerHTML = `
+        <div class="note-content">
+            <p>${data.noteText}</p>
+            ${data.category ? `<span class="category">${data.category}</span>` : ''}
         </div>
-        <div class="theme-switcher">
-            <span>Karanlık Mod</span>
-            <label class="switch">
-                <input type="checkbox" id="theme-toggle">
-                <span class="slider round"></span>
-            </label>
+        <div class="note-actions">
+            <button class="ai-btn" title="AI Asistan">${aiIcon}</button>
+            <button class="edit-btn" title="Düzenle">${editIcon}</button>
+            <button class="delete-btn" title="Sil">${deleteIcon}</button>
         </div>
-    </header>
+    `;
 
-    <main id="app">
-        <div id="courses-container">
-            <h2>Dersler</h2>
-            <div class="controls">
-                <input type="text" id="course-name-input" placeholder="Yeni ders adı...">
-                <button id="add-course-btn" class="primary-btn">Ders Ekle</button>
-            </div>
-            <div id="courses-list"></div>
-        </div>
+    div.querySelector('.delete-btn').onclick = () => deleteDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, id));
+    div.querySelector('.edit-btn').onclick = () => openEditModal('note', id, data);
+    div.querySelector('.ai-btn').onclick = () => openAiChatModal(data.noteText);
+    
+    notesListDiv.appendChild(div);
+};
 
-        <div id="units-container" style="display: none;">
-             <div class="units-header">
-                <button id="back-to-courses-btn" class="secondary-btn">&larr; Derslere Geri Dön</button>
-                <div class="header-content">
-                    <h2 id="selected-course-title"></h2>
-                </div>
-            </div>
-            <div class="controls">
-                <input type="text" id="unit-name-input" placeholder="Yeni ünite adı...">
-                <button id="add-unit-btn" class="primary-btn">Ünite Ekle</button>
-            </div>
+// --- Add Operations ---
+document.getElementById('add-course-btn').onclick = async () => {
+    const name = courseNameInput.value.trim();
+    if (name) {
+        await addDoc(collection(db, 'courses'), { name, createdAt: new Date() });
+        courseNameInput.value = '';
+    }
+};
 
-            <div class="top-controls-container">
-                <div class="global-review-controls">
-                    <h3>Derse Özel Rastgele Tekrar</h3>
-                    <p>Bu dersteki tüm ünitelerden rastgele bir test başlatın.</p>
-                    <button id="random-review-btn" class="secondary-btn">20 Notluk Rastgele Test Başlat</button>
-                </div>
-                <div id="streak-container" class="streak-card">
-                    <div class="streak-icon">🔥</div>
-                    <div class="streak-info">
-                        <h3 class="streak-count">0 Gün</h3>
-                        <p>Seri</p>
-                    </div>
-                    <div class="streak-progress">
-                        <p class="progress-text">Bugünkü Hedef: 0 / 100</p>
-                    </div>
-                </div>
-            </div>
+document.getElementById('add-unit-btn').onclick = async () => {
+    const name = unitNameInput.value.trim();
+    if (name && selectedCourseId) {
+        await addDoc(collection(db, `courses/${selectedCourseId}/units`), { name, createdAt: new Date() });
+        unitNameInput.value = '';
+    }
+};
 
-            <div id="units-list"></div>
-        </div>
+document.getElementById('add-note-btn').onclick = async () => {
+    const text = noteTextInput.value.trim();
+    const category = noteCategoryInput.value.trim();
+    if (text && selectedUnitId) {
+        await addDoc(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), {
+            noteText: text,
+            category: category,
+            keyword: selectedKeyword,
+            createdAt: new Date()
+        });
+        noteTextInput.value = '';
+        noteCategoryInput.value = '';
+        selectedKeyword = '';
+        selectedKeywordDisplay.textContent = 'Henüz seçilmedi.';
+    }
+};
 
-        <div id="notes-container" style="display: none;">
-            <div class="notes-header">
-                 <button id="back-to-units-btn" class="secondary-btn">&larr; Geri</button>
-                 <div class="header-content">
-                    <h2 id="selected-unit-title"></h2>
-                    <div id="notes-stats-display" class="unit-stats"></div>
-                 </div>
-                 <button id="show-add-note-form-btn" class="primary-btn">+ Yeni Not Ekle</button>
-            </div>
-           
-            <div id="add-note-container" style="display: none;">
-                <div id="add-note-form">
-                    <textarea id="note-text-input" placeholder="Öğrenilecek bilgiyi buraya yazın..." rows="4"></textarea>
-                    <div class="keyword-section">
-                        <b>Seçilen Anahtar Kelime:</b>
-                        <span id="selected-keyword-display">Henüz seçilmedi. (Metinden seçin)</span>
-                    </div>
-                    <input type="text" id="note-category-input" placeholder="Kategori seçin veya yeni yazın..." list="categories-datalist">
-                    <datalist id="categories-datalist"></datalist>
-                    <div class="add-note-actions">
-                        <button id="add-note-btn" class="primary-btn">Notu Kaydet</button>
-                        <button id="cancel-add-note-btn" class="secondary-btn">İptal</button>
-                    </div>
-                </div>
-            </div>
+// --- Keyword Selection ---
+noteTextInput.onmouseup = () => {
+    const sel = window.getSelection().toString().trim();
+    if (sel) {
+        selectedKeyword = sel;
+        selectedKeywordDisplay.textContent = sel;
+    }
+};
 
-            <div id="notes-view">
-                <div class="notes-section" id="unmemorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmemiş</h3>
-                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Ara...">
-                    </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmemiş">10 Not Test Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmemiş">Tümünü Test Et</button>
-                        </div>
-                    </div>
-                    <div id="unmemorized-notes-list" class="notes-list-column"></div>
-                </div>
-                <div class="notes-section" id="memorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmiş</h3>
-                        <input type="search" id="search-memorized" class="search-input" placeholder="Ara...">
-                    </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="critical" data-status="Ezberlenmiş">Kritik Notlar (%50 Altı)</button>
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmiş">10 Not Tekrar Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmiş">Tümünü Tekrar Et</button>
-                        </div>
-                    </div>
-                    <div id="memorized-notes-list" class="notes-list-column"></div>
-                </div>
-            </div>
-        </div>
+// --- AI Chat ---
+const openAiChatModal = (noteText) => {
+    currentAiChatNote = noteText;
+    document.getElementById('ai-chat-history').innerHTML = `<div class="system-message">Not: "<strong>${noteText}</strong>"</div>`;
+    document.getElementById('ai-chat-modal').style.display = 'block';
+};
 
-        <div id="quiz-container" style="display: none;">
-            <h2 id="quiz-question"></h2>
-            <div id="quiz-options"></div>
-            <p id="quiz-feedback"></p>
-        </div>
-    </main>
+document.getElementById('ai-send-btn').onclick = async () => {
+    const input = document.getElementById('ai-chat-input');
+    const msg = input.value.trim();
+    if (!msg) return;
 
-    <!-- Modal for editing -->
-    <div id="edit-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h3 id="modal-title">Düzenle</h3>
-            <textarea id="modal-textarea" rows="4"></textarea>
-            <button id="modal-save-btn" class="primary-btn">Kaydet</button>
-        </div>
-    </div>
+    const history = document.getElementById('ai-chat-history');
+    history.innerHTML += `<div class="chat-message user-message">${msg}</div>`;
+    input.value = '';
 
-    <!-- Modal for AI Chat -->
-    <div id="ai-chat-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="close-btn">&times;</span>
-            <h3>Yapay Zeka Asistanı</h3>
-            <div id="ai-chat-history"></div>
-            <div id="ai-chat-input-container">
-                <textarea id="ai-chat-input" placeholder="Bu not hakkında bir soru sor..." rows="2"></textarea>
-                <button id="ai-send-btn" class="primary-btn">Gönder</button>
-            </div>
-        </div>
-    </div>
+    try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const prompt = `Not: "${currentAiChatNote}". Soru: "${msg}". Bu notla ilgili kısa ve öz bilgi ver.`;
+        const result = await model.generateContent(prompt);
+        history.innerHTML += `<div class="chat-message ai-message">${result.response.text()}</div>`;
+        history.scrollTop = history.scrollHeight;
+    } catch (e) {
+        console.error(e);
+    }
+};
 
-    <script type="module" src="app.js"></script>
-</body>
-</html>
+// --- Modals & Initialization ---
+const openEditModal = (type, id, data) => {
+    currentEdit = { type, id, originalData: data };
+    document.getElementById('modal-textarea').value = data.noteText || data.name;
+    document.getElementById('edit-modal').style.display = 'block';
+};
+
+document.querySelector('.close-btn').onclick = () => document.getElementById('edit-modal').style.display = 'none';
+document.getElementById('back-to-courses-btn').onclick = showCourses;
+document.getElementById('back-to-units-btn').onclick = () => showUnits(selectedCourseId, selectedCourseTitle.textContent);
+
+// Tema & Başlangıç
+document.getElementById('theme-toggle').onchange = (e) => {
+    document.documentElement.setAttribute('data-theme', e.target.checked ? 'dark' : 'light');
+};
+
+displayCourses();
