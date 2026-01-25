@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilgi Kartı Uygulaması</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="logo">
+            <h1>Bilgi Kartları</h1>
+        </div>
+        <div class="theme-switcher">
+            <span>Karanlık Mod</span>
+            <label class="switch">
+                <input type="checkbox" id="theme-toggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+    </header>
+
+    <main id="app">
+        <div id="courses-container">
+            <h2>Dersler</h2>
+            <div class="controls">
+                <input type="text" id="course-name-input" placeholder="Yeni ders adı...">
+                <button id="add-course-btn" class="primary-btn">Ders Ekle</button>
+            </div>
+            <div id="courses-list"></div>
+        </div>
+
+        <div id="units-container" style="display: none;">
+             <div class="units-header">
+                <button id="back-to-courses-btn" class="secondary-btn">&larr; Derslere Geri Dön</button>
+                <div class="header-content">
+                    <h2 id="selected-course-title"></h2>
+                </div>
+            </div>
+            <div class="controls">
+                <input type="text" id="unit-name-input" placeholder="Yeni ünite adı...">
+                <button id="add-unit-btn" class="primary-btn">Ünite Ekle</button>
+            </div>
+
+            <div class="top-controls-container">
+                <div class="global-review-controls">
+                    <h3>Derse Özel Rastgele Tekrar</h3>
+                    <p>Bu dersteki tüm ünitelerden rastgele bir test başlatın.</p>
+                    <button id="random-review-btn" class="secondary-btn">20 Notluk Rastgele Test Başlat</button>
+                </div>
+                <div id="streak-container" class="streak-card">
+                    <div class="streak-icon">🔥</div>
+                    <div class="streak-info">
+                        <h3 class="streak-count">0 Gün</h3>
+                        <p>Seri</p>
+                    </div>
+                    <div class="streak-progress">
+                        <p class="progress-text">Bugünkü Hedef: 0 / 100</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="units-list"></div>
+        </div>
+
+        <div id="notes-container" style="display: none;">
+            <div class="notes-header">
+                 <button id="back-to-units-btn" class="secondary-btn">&larr; Geri</button>
+                 <div class="header-content">
+                    <h2 id="selected-unit-title"></h2>
+                    <div id="notes-stats-display" class="unit-stats"></div>
+                 </div>
+                 <button id="show-add-note-form-btn" class="primary-btn">+ Yeni Not Ekle</button>
+            </div>
+           
+            <div id="add-note-container" style="display: none;">
+                <div id="add-note-form">
+                    <textarea id="note-text-input" placeholder="Öğrenilecek bilgiyi buraya yazın..." rows="4"></textarea>
+                    <div class="keyword-section">
+                        <b>Seçilen Anahtar Kelime:</b>
+                        <span id="selected-keyword-display">Henüz seçilmedi. (Metinden seçin)</span>
+                    </div>
+                    <input type="text" id="note-category-input" placeholder="Kategori seçin veya yeni yazın..." list="categories-datalist">
+                    <datalist id="categories-datalist"></datalist>
+                    <div class="add-note-actions">
+                        <button id="add-note-btn" class="primary-btn">Notu Kaydet</button>
+                        <button id="cancel-add-note-btn" class="secondary-btn">İptal</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="notes-view">
+                <div class="notes-section" id="unmemorized-section">
+                    <div class="section-header">
+                        <h3>Ezberlenmemiş</h3>
+                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Ara...">
+                    </div>
+                    <div class="batch-review-controls">
+                        <div class="batch-options">
+                            <button class="batch-btn" data-type="10" data-status="Ezberlenmemiş">10 Not Test Et</button>
+                            <button class="batch-btn" data-type="all" data-status="Ezberlenmemiş">Tümünü Test Et</button>
+                        </div>
+                    </div>
+                    <div id="unmemorized-notes-list" class="notes-list-column"></div>
+                </div>
+                <div class="notes-section" id="memorized-section">
+                    <div class="section-header">
+                        <h3>Ezberlenmiş</h3>
+                        <input type="search" id="search-memorized" class="search-input" placeholder="Ara...">
+                    </div>
+                    <div class="batch-review-controls">
+                        <div class="batch-options">
+                            <button class="batch-btn" data-type="critical" data-status="Ezberlenmiş">Kritik Notlar (%50 Altı)</button>
+                            <button class="batch-btn" data-type="10" data-status="Ezberlenmiş">10 Not Tekrar Et</button>
+                            <button class="batch-btn" data-type="all" data-status="Ezberlenmiş">Tümünü Tekrar Et</button>
+                        </div>
+                    </div>
+                    <div id="memorized-notes-list" class="notes-list-column"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="quiz-container" style="display: none;">
+            <h2 id="quiz-question"></h2>
+            <div id="quiz-options"></div>
+            <p id="quiz-feedback"></p>
+        </div>
+    </main>
+
+    <!-- Modal for editing -->
+    <div id="edit-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3 id="modal-title">Düzenle</h3>
+            <textarea id="modal-textarea" rows="4"></textarea>
+            <button id="modal-save-btn" class="primary-btn">Kaydet</button>
+        </div>
+    </div>
+
+    <!-- Modal for AI Chat -->
+    <div id="ai-chat-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3>Yapay Zeka Asistanı</h3>
+            <div id="ai-chat-history"></div>
+            <div id="ai-chat-input-container">
+                <textarea id="ai-chat-input" placeholder="Bu not hakkında bir soru sor..." rows="2"></textarea>
+                <button id="ai-send-btn" class="primary-btn">Gönder</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
