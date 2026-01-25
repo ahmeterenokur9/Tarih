@@ -409,36 +409,31 @@ notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('batch-btn')) {
         const button = e.target;
         const type = button.dataset.type;
-        const status = button.dataset.status;
 
-        const notesRef = collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`);
-        let notesQuery;
-
-        if (type === 'critical') {
-            notesQuery = query(notesRef, where('status', '==', 'Ezberlenmiş'), where('confidenceLevel', '<', 50));
-        } else {
-            notesQuery = query(notesRef, where('status', '==', status));
-        }
+        const notesRef = collection(
+            db,
+            `courses/${selectedCourseId}/units/${selectedUnitId}/notes`
+        );
 
         try {
-            const snapshot = await getDocs(notesQuery);
+            const snapshot = await getDocs(notesRef);
             let notes = [];
+
             snapshot.forEach(doc => {
-                notes.push({ id: doc.id, unitId: selectedUnitId, courseId: selectedCourseId, ...doc.data() });
+                notes.push({
+                    id: doc.id,
+                    unitId: selectedUnitId,
+                    courseId: selectedCourseId,
+                    ...doc.data()
+                });
             });
 
-            if (type !== 'critical' && type !== 'all') {
+            // 10 not sınırı varsa uygula
+            if (type !== 'all') {
                 const limit = parseInt(type, 10);
-                if (status === 'Ezberlenmiş') {
-                    // Sort by lowest confidence for memorized notes
-                    notes.sort((a, b) => a.confidenceLevel - b.confidenceLevel);
-                } else {
-                    // Random sort for unmemorized
-                    notes.sort(() => 0.5 - Math.random());
-                }
-                notes = notes.slice(0, limit);
+                notes = notes.sort(() => 0.5 - Math.random()).slice(0, limit);
             }
-            
+
             startQuizSession(notes);
 
         } catch (error) {
@@ -446,6 +441,7 @@ notesContainer.addEventListener('click', async (e) => {
         }
     }
 });
+
 
 modalSaveBtn.addEventListener('click', async () => {
     const newText = modalTextarea.value.trim();
