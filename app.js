@@ -705,23 +705,18 @@ const displayNotes = (unitId) => {
             actionsHtml = '';
 
             noteElement.innerHTML = `
-                <div class="note-content">
-                    <p>${displayText}</p>
-                    <span class="category">${note.category}</span>
-                    ${statsHtml}
-                </div>
-                <div class="note-info">
-                     <p><b>Durum:</b> ${note.status}</p>
-                     <div class="actions">
-                        ${actionsHtml}
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
-                    <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
-                    <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
-                </div>
-            `;
+    <div class="note-content">
+        <p>${displayText}</p>
+        <span class="category">${note.category}</span>
+        ${statsHtml}
+    </div>
+    <div class="card-actions">
+        <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
+        <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
+        <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
+    </div>
+`;
+
 
             allNotesListDiv.appendChild(noteElement);
 
