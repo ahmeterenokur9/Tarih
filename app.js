@@ -680,81 +680,75 @@ const displayNotes = (unitId) => {
         }
 
         snapshot.forEach(doc => {
-            const note = doc.data();
-            categories.add(note.category);
+    const note = doc.data();
+    categories.add(note.category);
 
-            const noteId = doc.id;
-            const noteElement = document.createElement('div');
-            noteElement.classList.add('note-item');
-            noteElement.dataset.id = noteId;
+    const noteId = doc.id;
+    const noteElement = document.createElement('div');
+    noteElement.classList.add('note-item');
+    noteElement.dataset.id = noteId;
 
-            let actionsHtml = '';
-            let statsHtml = '';
-            // Make the keyword bold in the note text for display
-            const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
+    let actionsHtml = '';
+    let statsHtml = '';
 
-            // ❌ Eski butonlu yapı SİLİNECEK
-// if (note.status === 'Ezberlenmemiş') { ... } else { ... }
+    const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
 
-// ✅ Yeni sade yapı
-const correct = note.testCorrectCount || 0;
-const incorrect = note.testIncorrectCount || 0;
+    const correct = note.testCorrectCount || 0;
+    const incorrect = note.testIncorrectCount || 0;
 
-statsHtml = `
-    <div class="note-learning-stats">
-        <span><b>Doğru:</b> ${correct}</span>
-        <span><b>Yanlış:</b> ${incorrect}</span>
-        <span><b>Güven:</b> ${note.confidenceLevel || 0}%</span>
-    </div>
-`;
+    statsHtml = `
+        <div class="note-learning-stats">
+            <span><b>Doğru:</b> ${correct}</span>
+            <span><b>Yanlış:</b> ${incorrect}</span>
+            <span><b>Güven:</b> ${note.confidenceLevel || 0}%</span>
+        </div>
+    `;
 
-actionsHtml = ``; // Artık kart içi aksiyon yok
+    actionsHtml = ``;
 
+    noteElement.innerHTML = `
+        <div class="note-content">
+            <p>${displayText}</p>
+            <span class="category">${note.category}</span>
+            ${statsHtml}
+        </div>
+        <div class="note-info">
+             <p><b>Durum:</b> ${note.status}</p>
+             <div class="actions">
+                ${actionsHtml}
+            </div>
+        </div>
+        <div class="card-actions">
+            <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
+            <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
+            <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
+        </div>
+    `;
 
-            noteElement.innerHTML = `
-                <div class="note-content">
-                    <p>${displayText}</p>
-                    <span class="category">${note.category}</span>
-                    ${statsHtml}
-                </div>
-                <div class="note-info">
-                     <p><b>Durum:</b> ${note.status}</p>
-                     <div class="actions">
-                        ${actionsHtml}
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
-                    <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
-                    <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
-                </div>
-            `;
-            
-            // Append to the correct list
-            allNotesListDiv.appendChild(noteElement);
+    allNotesListDiv.appendChild(noteElement);
 
-if (note.status === 'Ezberlenmemiş') {
-    unmemorizedCount++;
-} else {
-    memorizedCount++;
-}
+    if (note.status === 'Ezberlenmemiş') {
+        unmemorizedCount++;
+    } else {
+        memorizedCount++;
+    }
 
+    noteElement.querySelector('.delete-note-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteNote(noteId);
+    });
 
-            // Add event listeners
-            noteElement.querySelector('.delete-note-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                deleteNote(noteId);
-            });
+    noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditModal('note', noteId, note);
+    });
 
-            noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                openEditModal('note', noteId, note);
-            });
-            
-            noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                openAiChatModal(note.noteText);
-            });
+    noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openAiChatModal(note.noteText);
+    });
+
+}); // ✅ forEach burada KAPANIYOR
 
             
         
