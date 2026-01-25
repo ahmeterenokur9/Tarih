@@ -94,35 +94,27 @@
             </div>
 
             <div id="notes-view">
-                <div class="notes-section" id="unmemorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmemiş</h3>
-                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Ara...">
-                    </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmemiş">10 Not Test Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmemiş">Tümünü Test Et</button>
-                        </div>
-                    </div>
-                    <div id="unmemorized-notes-list" class="notes-list-column"></div>
-                </div>
-                <div class="notes-section" id="memorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmiş</h3>
-                        <input type="search" id="search-memorized" class="search-input" placeholder="Ara...">
-                    </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="critical" data-status="Ezberlenmiş">Kritik Notlar (%50 Altı)</button>
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmiş">10 Not Tekrar Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmiş">Tümünü Tekrar Et</button>
-                        </div>
-                    </div>
-                    <div id="memorized-notes-list" class="notes-list-column"></div>
-                </div>
+    <div class="notes-section" id="all-notes-section">
+        <div class="section-header">
+            <h3>Notlar</h3>
+            <input type="search" id="search-notes" class="search-input" placeholder="Ara...">
+        </div>
+
+        <div class="batch-review-controls">
+            <div class="batch-options">
+                <button class="batch-btn" data-type="10" data-status="Hepsi">
+                    10 Not Test Et
+                </button>
+                <button class="batch-btn" data-type="all" data-status="Hepsi">
+                    Tümünü Test Et
+                </button>
             </div>
         </div>
+
+        <div id="all-notes-list" class="notes-list-column"></div>
+    </div>
+</div>
+
 
         <div id="quiz-container" style="display: none;">
             <h2 id="quiz-question"></h2>
