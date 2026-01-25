@@ -80,8 +80,9 @@ let selectedKeyword = ''; // To store the highlighted keyword
 let unsubscribeNotes = null; // To stop listening to previous unit's notes
 let currentEdit = { type: null, id: null, originalData: null }; // To manage what we are editing
 let currentAiChatNote = null; // To store context for AI chat
-let quizQueue = [];
-let currentQuizIndex = 0;
+window.quizQueue = [];
+window.currentQuizIndex = 0;
+
 
 // --- Helper Functions ---
 const isSameDay = (date1, date2) => {
@@ -853,7 +854,7 @@ const showCoursesView = () => {
 
 // --- Quiz Management ---
 
-const displayCurrentQuizQuestion = async () => {
+window.displayCurrentQuizQuestion = async () => {
     if (currentQuizIndex >= quizQueue.length) {
         // Quiz is over
         await updateStreak(quizQueue.length); // Update streak with the number of questions answered
@@ -967,14 +968,15 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
     setTimeout(displayCurrentQuizQuestion, 1500);
 };
 
-const startQuizSession = (notes) => {
+window.startQuizSession = (notes) => {
     if (notes.length === 0) {
         alert('Bu kriterlere uygun tekrar edilecek not bulunamadı.');
         return;
     }
-    quizQueue = notes.sort(() => 0.5 - Math.random()); // Shuffle notes
-    currentQuizIndex = 0;
-    displayCurrentQuizQuestion();
+    window.quizQueue = notes.sort(() => 0.5 - Math.random());
+    window.currentQuizIndex = 0;
+    window.displayCurrentQuizQuestion();
+
 };
 
 
