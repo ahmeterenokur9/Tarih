@@ -411,44 +411,50 @@ searchMemorizedInput.addEventListener('input', (e) => {
 
 // Batch Review Event Listener
 // Event Delegation for Batch Reviews inside Notes Container
+// --- YENİ RASTGELE TEST MANTIĞI ---
 notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('batch-btn')) {
         const button = e.target;
-        const type = button.dataset.type;
-        const status = button.dataset.status;
+        const type = button.dataset.type; // HTML'deki data-type: "10" veya "all"
 
+        // Statü fark etmeksizin ünitedeki tüm notları referans alıyoruz
         const notesRef = collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`);
-        let notesQuery;
-
-        if (type === 'critical') {
-            notesQuery = query(notesRef, where('status', '==', 'Ezberlenmiş'), where('confidenceLevel', '<', 50));
-        } else {
-            notesQuery = query(notesRef, where('status', '==', status));
-        }
-
+        
         try {
-            const snapshot = await getDocs(notesQuery);
-            let notes = [];
+            const snapshot = await getDocs(notesRef);
+            let allUnitNotes = [];
+            
             snapshot.forEach(doc => {
-                notes.push({ id: doc.id, unitId: selectedUnitId, courseId: selectedCourseId, ...doc.data() });
+                allUnitNotes.push({ 
+                    id: doc.id, 
+                    unitId: selectedUnitId, 
+                    courseId: selectedCourseId, 
+                    ...doc.data() 
+                });
             });
 
-            if (type !== 'critical' && type !== 'all') {
-                const limit = parseInt(type, 10);
-                if (status === 'Ezberlenmiş') {
-                    // Sort by lowest confidence for memorized notes
-                    notes.sort((a, b) => a.confidenceLevel - b.confidenceLevel);
-                } else {
-                    // Random sort for unmemorized
-                    notes.sort(() => 0.5 - Math.random());
-                }
-                notes = notes.slice(0, limit);
+            if (allUnitNotes.length === 0) {
+                alert('Bu ünitede henüz test edilecek not bulunamadı!');
+                return;
+            }
+
+            // 1. Tüm notları tamamen rastgele karıştır
+            allUnitNotes.sort(() => 0.5 - Math.random());
+
+            // 2. Seçime göre notları ayır
+            let selectedNotes;
+            if (type === 'all') {
+                selectedNotes = allUnitNotes;
+            } else {
+                const limit = parseInt(type, 10); // data-type="10" ise 10 tane al
+                selectedNotes = allUnitNotes.slice(0, limit);
             }
             
-            startQuizSession(notes);
+            startQuizSession(selectedNotes);
 
         } catch (error) {
-            console.error("Error fetching notes for batch review: ", error);
+            console.error("Notlar çekilirken hata oluştu: ", error);
+            alert('Test başlatılamadı, bir hata oluştu.');
         }
     }
 });
