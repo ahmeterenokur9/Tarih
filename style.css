@@ -862,5 +862,48 @@ textarea:focus {
     flex-grow: 1;
     resize: none;
 }
+/* --- TEK SÜTUN VE ORTALAMA AYARLARI --- */
 
+/* Notların olduğu ana kutuyu daralt ve ortala */
+#notes-view {
+    display: block !important; /* İki sütunlu flex yapısını iptal et */
+    max-width: 800px !important; 
+    margin: 0 auto !important;
+    padding: 20px;
+}
+
+/* Test butonlarını yan yana ve ortalı yap */
+.batch-options {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+/* Not listesini alt alta düzgünce sırala */
+.notes-list-column {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+}
+
+/* Arama çubuğunu güzelleştir ve ortala */
+.section-header {
+    display: flex;
+    justify-content: center;
+    border-bottom: none;
+    margin-bottom: 15px;
+}
+
+.section-header h3 {
+    display: none; /* "Ezberlenmemiş" başlığına artık gerek yok, gizle */
+}
+
+/* Not kartlarının genişliğini tam yap */
+.note-card {
+    width: 100%;
+    margin-bottom: 10px;
+}
 
