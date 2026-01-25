@@ -576,9 +576,8 @@ textarea:focus {
 }
 
 #notes-view {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 30px;
+    display: flex;
+    justify-content: center;
 }
 
 .notes-section .section-header {
@@ -862,3 +861,8 @@ textarea:focus {
     flex-grow: 1;
     resize: none;
 }
+.notes-section {
+    width: 100%;
+    max-width: 900px;   /* Ortada dursun, çok genişlemesin */
+}
+
