@@ -321,56 +321,48 @@ window.addEventListener('click', (event) => {
 
 
 // Global Random Review Event Listener
-randomReviewBtn.addEventListener('click', async () => {
-    if (!selectedCourseId) {
-        alert('Lütfen önce bir ders seçin.');
-        return;
-    }
-    // Show a loading state or disable the button
-    randomReviewBtn.textContent = 'Notlar Yükleniyor...';
-    randomReviewBtn.disabled = true;
-
-    try {
-        const allNotes = [];
-        // 1. Get all units for the selected course
-        const unitsSnapshot = await getDocs(collection(db, `courses/${selectedCourseId}/units`));
+// YENİ DİNAMİK KODU YAPIŞTIR:
+document.querySelectorAll('.global-rand-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (!selectedCourseId) return;
         
-        // 2. Create an array of promises to fetch notes from each unit
-        const notesPromises = [];
-        unitsSnapshot.forEach(unitDoc => {
-            const unitId = unitDoc.id;
-            notesPromises.push(getDocs(collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`)));
-        });
-
-        // 3. Wait for all note fetches to complete
-        const allNotesSnapshots = await Promise.all(notesPromises);
-
-        // 4. Combine all notes into a single array
-        allNotesSnapshots.forEach((notesSnapshot, index) => {
-            const unitId = unitsSnapshot.docs[index].id;
-            notesSnapshot.forEach(doc => {
-                allNotes.push({ id: doc.id, unitId: unitId, courseId: selectedCourseId, ...doc.data() });
-            });
-        });
-
-        // 5. Take a random sample of 20 notes
-        const randomNotes = allNotes.sort(() => 0.5 - Math.random()).slice(0, 20);
-
-        // Reset button state and start the quiz
-        randomReviewBtn.textContent = '20 Notluk Rastgele Test Başlat';
-        randomReviewBtn.disabled = false;
+        const countToSelect = parseInt(btn.dataset.count); // Butondaki 20, 30 vs. değerini alır
+        const unitsRef = collection(db, `courses/${selectedCourseId}/units`);
         
-        // We need to clear selectedUnitId so the quiz summary returns to the units page of the course
-        selectedUnitId = null;
-        selectedUnitName = null;
-        
-        startQuizSession(randomNotes);
+        try {
+            const unitsSnapshot = await getDocs(unitsRef);
+            let allNotes = [];
 
-    } catch (error) {
-        console.error("Error fetching notes for global review: ", error);
-        randomReviewBtn.textContent = 'Hata Oluştu!';
-    }
+            // Tüm üniteleri gez ve içindeki notları topla
+            for (const unitDoc of unitsSnapshot.docs) {
+                const notesSnapshot = await getDocs(collection(db, `courses/${selectedCourseId}/units/${unitDoc.id}/notes`));
+                notesSnapshot.forEach(noteDoc => {
+                    allNotes.push({ 
+                        id: noteDoc.id, 
+                        unitId: unitDoc.id, 
+                        courseId: selectedCourseId, 
+                        ...noteDoc.data() 
+                    });
+                });
+            }
+
+            if (allNotes.length === 0) {
+                alert('Bu derste henüz hiç not bulunamadı!');
+                return;
+            }
+
+            // Notları karıştır ve butondaki sayı kadarını seç
+            allNotes.sort(() => 0.5 - Math.random());
+            const selectedNotes = allNotes.slice(0, countToSelect);
+            
+            startQuizSession(selectedNotes);
+        } catch (error) {
+            console.error("Genel test hatası: ", error);
+            alert("Test başlatılırken bir hata oluştu.");
+        }
+    });
 });
+
 
 
 // --- UI Interactions ---
