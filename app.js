@@ -693,22 +693,23 @@ const displayNotes = (unitId) => {
             // Make the keyword bold in the note text for display
             const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
 
-            if (note.status === 'Ezberlenmemiş') {
-                actionsHtml = `
-                    <button class="test-unmemorized-btn secondary-btn">Test Et</button>
-                    <button class="mark-memorized-btn primary-btn">Ezberledim</button>
-                `;
-                const correct = note.testCorrectCount || 0;
-                const incorrect = note.testIncorrectCount || 0;
-                statsHtml = `
-                    <div class="note-learning-stats">
-                        <span><b>Doğru:</b> ${correct}</span>
-                        <span><b>Yanlış:</b> ${incorrect}</span>
-                    </div>
-                `;
-            } else {
-                actionsHtml = `<button class="start-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel}%</p>`;
-            }
+            // ❌ Eski butonlu yapı SİLİNECEK
+// if (note.status === 'Ezberlenmemiş') { ... } else { ... }
+
+// ✅ Yeni sade yapı
+const correct = note.testCorrectCount || 0;
+const incorrect = note.testIncorrectCount || 0;
+
+statsHtml = `
+    <div class="note-learning-stats">
+        <span><b>Doğru:</b> ${correct}</span>
+        <span><b>Yanlış:</b> ${incorrect}</span>
+        <span><b>Güven:</b> ${note.confidenceLevel || 0}%</span>
+    </div>
+`;
+
+actionsHtml = ``; // Artık kart içi aksiyon yok
+
 
             noteElement.innerHTML = `
                 <div class="note-content">
@@ -755,21 +756,7 @@ if (note.status === 'Ezberlenmemiş') {
                 openAiChatModal(note.noteText);
             });
 
-            const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
-            if (markMemorizedBtn) {
-                markMemorizedBtn.addEventListener('click', () => {
-                    // Reset stats when moving to memorized
-                    updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
-                });
-            }
-
-            const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
-            if (testBtn) {
-                testBtn.addEventListener('click', () => {
-                    startQuizSession([{ id: noteId, unitId: selectedUnitId, courseId: selectedCourseId, ...note }]);
-                });
-            }
-        });
+            
         
         // Update categories datalist
         categoriesDatalist.innerHTML = '';
