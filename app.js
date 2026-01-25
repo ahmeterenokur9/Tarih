@@ -26,8 +26,7 @@ const unitsContainer = document.getElementById('units-container');
 
 // Note elements
 const notesContainer = document.getElementById('notes-container');
-const unmemorizedNotesListDiv = document.getElementById('unmemorized-notes-list');
-const memorizedNotesListDiv = document.getElementById('memorized-notes-list');
+const allNotesListDiv = document.getElementById('all-notes-list');
 const selectedUnitTitle = document.getElementById('selected-unit-title');
 const notesStatsDisplay = document.getElementById('notes-stats-display');
 const addNoteContainer = document.getElementById('add-note-container');
@@ -40,8 +39,7 @@ const categoriesDatalist = document.getElementById('categories-datalist');
 const addNoteBtn = document.getElementById('add-note-btn');
 const backToUnitsBtn = document.getElementById('back-to-units-btn');
 // Search inputs
-const searchUnmemorizedInput = document.getElementById('search-unmemorized');
-const searchMemorizedInput = document.getElementById('search-memorized');
+const searchNotesInput = document.getElementById('search-notes');
 
 // Quiz elements
 const quizContainer = document.getElementById('quiz-container');
@@ -400,12 +398,8 @@ const filterNotes = (searchTerm, noteListElement) => {
     });
 };
 
-searchUnmemorizedInput.addEventListener('input', (e) => {
-    filterNotes(e.target.value, unmemorizedNotesListDiv);
-});
-
-searchMemorizedInput.addEventListener('input', (e) => {
-    filterNotes(e.target.value, memorizedNotesListDiv);
+searchNotesInput.addEventListener('input', (e) => {
+    filterNotes(e.target.value, allNotesListDiv);
 });
 
 
@@ -670,8 +664,8 @@ const displayNotes = (unitId) => {
     const notesQuery = query(collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`));
     
     unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-        unmemorizedNotesListDiv.innerHTML = '';
-        memorizedNotesListDiv.innerHTML = '';
+        allNotesListDiv.innerHTML = '';
+
         
         const categories = new Set();
         let unmemorizedCount = 0;
@@ -679,8 +673,7 @@ const displayNotes = (unitId) => {
         const totalCount = snapshot.size;
 
         if (snapshot.empty) {
-            unmemorizedNotesListDiv.innerHTML = '<p>Bu ünitede henüz not yok.</p>';
-            memorizedNotesListDiv.innerHTML = ''; // Clear the other column too
+            allNotesListDiv.innerHTML = '';
             notesStatsDisplay.innerHTML = ''; // Clear stats
             categoriesDatalist.innerHTML = ''; // Clear datalist
             return;
@@ -737,13 +730,14 @@ const displayNotes = (unitId) => {
             `;
             
             // Append to the correct list
-            if (note.status === 'Ezberlenmemiş') {
-                unmemorizedNotesListDiv.appendChild(noteElement);
-                unmemorizedCount++;
-            } else {
-                memorizedNotesListDiv.appendChild(noteElement);
-                memorizedCount++;
-            }
+            allNotesListDiv.appendChild(noteElement);
+
+if (note.status === 'Ezberlenmemiş') {
+    unmemorizedCount++;
+} else {
+    memorizedCount++;
+}
+
 
             // Add event listeners
             noteElement.querySelector('.delete-note-btn').addEventListener('click', (e) => {
@@ -792,12 +786,7 @@ const displayNotes = (unitId) => {
             <span class="stat-item">Ezberlenmemiş: ${unmemorizedCount}</span>
         `;
         
-        if (memorizedCount === 0) {
-            memorizedNotesListDiv.innerHTML = '<p>Henüz ezberlenmiş not yok.</p>';
-        }
-        if (unmemorizedCount === 0 && !snapshot.empty) {
-            unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
-        }
+        
     });
 };
 
@@ -855,8 +844,8 @@ const showNotesView = async (unitId, unitName) => {
     addNoteContainer.style.display = 'none';
     showAddNoteFormBtn.textContent = '+ Yeni Not Ekle';
     resetAddNoteForm();
-    searchUnmemorizedInput.value = ''; // Reset search
-    searchMemorizedInput.value = ''; // Reset search
+    searchNotesInput.value = '';
+
 
     displayNotes(unitId);
 };
