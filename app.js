@@ -855,9 +855,9 @@ const showCoursesView = () => {
 // --- Quiz Management ---
 
 window.displayCurrentQuizQuestion = async () => {
-    if (currentQuizIndex >= quizQueue.length) {
+    if (window.currentQuizIndex >= window.quizQueue.length) {
         // Quiz is over
-        await updateStreak(quizQueue.length); // Update streak with the number of questions answered
+        await updateStreak(window.quizQueue.length);
         await displayStreak(); // Refresh the display
         
         quizQuestion.innerHTML = `Test Tamamlandı!`;
@@ -882,7 +882,7 @@ window.displayCurrentQuizQuestion = async () => {
         return;
     }
 
-    const noteToTest = quizQueue[currentQuizIndex];
+    const noteToTest = window.quizQueue[window.currentQuizIndex];
     unitsContainer.style.display = 'none';
     notesContainer.style.display = 'none';
     quizContainer.style.display = 'block';
@@ -940,7 +940,7 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
     if (selectedOption.toLowerCase() === correctNote.keyword.toLowerCase()) {
         quizFeedback.textContent = "Doğru!";
         quizFeedback.className = 'correct';
-        quizQueue[currentQuizIndex].correct = true;
+        window.quizQueue[window.currentQuizIndex].correct = true;
         
         if (correctNote.status === 'Ezberlenmiş') {
             updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmiş', 100);
@@ -952,7 +952,7 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
     } else {
         quizFeedback.textContent = `Yanlış. Doğru cevap: ${correctNote.keyword}.`;
         quizFeedback.className = 'incorrect';
-        quizQueue[currentQuizIndex].correct = false;
+        window.quizQueue[window.currentQuizIndex].correct = false;
 
         if (correctNote.status === 'Ezberlenmiş') {
             const newConfidence = Math.max(0, correctNote.confidenceLevel - 25);
@@ -964,8 +964,9 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
         }
     }
 
-    currentQuizIndex++;
-    setTimeout(displayCurrentQuizQuestion, 1500);
+    window.currentQuizIndex++;
+    setTimeout(window.displayCurrentQuizQuestion, 1500);
+
 };
 
 window.startQuizSession = (notes) => {
