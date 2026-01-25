@@ -775,7 +775,7 @@ if (note.status === 'Ezberlenmemiş') {
         
         
     });
-};
+
 
 addNoteBtn.addEventListener('click', async () => {
     const noteText = noteTextInput.value.trim();
