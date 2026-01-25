@@ -98,38 +98,26 @@
                 </div>
             </div>
 
-            <div id="notes-view">
-                <div class="notes-section" id="unmemorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmemiş</h3>
-                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Ara...">
+            <div id="notes-view" style="max-width: 800px; margin: 0 auto;">
+                <div class="batch-review-controls" style="margin-bottom: 25px;">
+                    <div class="batch-options" style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+                        <button class="batch-btn" data-type="10">10 Soru</button>
+                        <button class="batch-btn" data-type="20">20 Soru</button>
+                        <button class="batch-btn" data-type="30">30 Soru</button>
+                        <button class="batch-btn" data-type="50">50 Soru</button>
+                        <button class="batch-btn" data-type="all">Tüm Ünite</button>
                     </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmemiş">10 Not Test Et</button>
-                            <button class="batch-btn" data-type="20" data-status="Ezberlenmemiş">20 Not Test Et</button>
-                            <button class="batch-btn" data-type="50" data-status="Ezberlenmemiş">50 Not Test Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmemiş">Tümünü Test Et</button>
-                        </div>
+                </div>
+
+                <div class="notes-section">
+                    <div class="section-header" style="justify-content: center; margin-bottom: 20px;">
+                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Notlarında ara..." style="width: 100%; max-width: 500px;">
                     </div>
                     <div id="unmemorized-notes-list" class="notes-list-column"></div>
-                </div>
-                <div class="notes-section" id="memorized-section">
-                    <div class="section-header">
-                        <h3>Ezberlenmiş</h3>
-                        <input type="search" id="search-memorized" class="search-input" placeholder="Ara...">
-                    </div>
-                    <div class="batch-review-controls">
-                        <div class="batch-options">
-                            <button class="batch-btn" data-type="critical" data-status="Ezberlenmiş">Kritik Notlar (%50 Altı)</button>
-                            <button class="batch-btn" data-type="10" data-status="Ezberlenmiş">10 Not Tekrar Et</button>
-                            <button class="batch-btn" data-type="all" data-status="Ezberlenmiş">Tümünü Tekrar Et</button>
-                        </div>
-                    </div>
-                    <div id="memorized-notes-list" class="notes-list-column"></div>
+                    
+                    <div id="memorized-notes-list" style="display: none;"></div>
                 </div>
             </div>
-        </div>
 
         <div id="quiz-container" style="display: none;">
             <h2 id="quiz-question"></h2>
