@@ -863,35 +863,4 @@ textarea:focus {
     resize: none;
 }
 
-/* 1. Ezberlenmiş sütununu tamamen gizle (JS hata almaz çünkü DOM'da hala var) */
-#memorized-section, 
-.notes-column.memorized {
-    display: none !important;
-}
 
-/* 2. Ezberlenmemiş kısmını kapsayan ana kutuyu iki sütunlu olmaktan çıkar */
-#notes-view {
-    display: block !important; /* Flex yapısını bozup alt alta getirir */
-    max-width: 850px !important; /* Notların yayılmasını engeller */
-    margin: 0 auto !important;   /* Ekranın tam ortasına alır */
-}
-
-/* 3. Ezberlenmemiş sütununun genişliğini %100 yap */
-#unmemorized-section {
-    width: 100% !important;
-}
-
-/* 4. Not listesini tek bir şerit haline getir */
-.notes-list-column {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-/* 5. Üstteki butonları ortala */
-.batch-options {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
