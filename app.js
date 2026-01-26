@@ -4,7 +4,7 @@ import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, 
 import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // --- Gemini AI Config ---
-const GEMINI_API_KEY = "AIzaSyCKt0z_CYh9qJ5giYGtiyefv7dQRY822L8";
+const GEMINI_API_KEY = "AIzaSyDsPESlU0vnH3I_HQf8bVk3u-dHgXFvhRw";
 // HATA DÜZELTMESİ: Eski API URL'si kaldırıldı, yerine SDK istemcisi oluşturuldu.
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
