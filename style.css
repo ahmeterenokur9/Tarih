@@ -906,4 +906,25 @@ textarea:focus {
     width: 100%;
     margin-bottom: 10px;
 }
+/* Başlık yanındaki ateş emojisi stili */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 15px; /* Başlık ile ateş arasındaki boşluk */
+}
+
+.header-streak {
+    font-size: 1.2rem;
+    font-weight: bold;
+    background: rgba(255, 126, 95, 0.1); /* Hafif turuncu arka plan */
+    padding: 5px 12px;
+    border-radius: 20px;
+    color: #ff7e5f; /* Ateş rengi */
+    display: none; /* İlk başta gizli, seri varsa görünecek */
+}
+
+[data-theme="dark"] .header-streak {
+    background: rgba(231, 56, 39, 0.2);
+    color: #f88f4b;
+}
 
