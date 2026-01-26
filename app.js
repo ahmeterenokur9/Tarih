@@ -8,7 +8,7 @@ const GEMINI_API_KEY = "AIzaSyDsPESlU0vnH3I_HQf8bVk3u-dHgXFvhRw";
 // HATA DÜZELTMESİ: Eski API URL'si kaldırıldı, yerine SDK istemcisi oluşturuldu.
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-
+const headerStreakDisplay = document.getElementById('header-streak-display');
 // --- DOM Elements ---
 // Course elements
 const coursesContainer = document.getElementById('courses-container');
@@ -135,6 +135,13 @@ const displayStreak = async () => {
         
         streakCountDisplay.textContent = `${streak} Gün`;
         streakProgressText.textContent = `Bugünkü Hedef: ${questionsToday} / ${DAILY_GOAL}`;
+        // Üstteki logonun yanındaki ateşi güncelle
+if (streak > 0) {
+    headerStreakDisplay.textContent = `🔥 ${streak}`;
+    headerStreakDisplay.style.display = 'block';
+} else {
+    headerStreakDisplay.style.display = 'none';
+}
 
         // Update card style based on today's goal completion, not the streak itself
         if (questionsToday >= DAILY_GOAL) {
