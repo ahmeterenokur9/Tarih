@@ -937,3 +937,9 @@ textarea:focus {
     margin: 3px 0;
 }
 
+.course-breakdown { margin-top: 8px; font-size: 13px; color: #222; }
+.course-breakdown h4 { margin: 0 0 6px 0; font-size: 14px; }
+.course-breakdown .course-item { margin: 3px 0; display:flex; gap:8px; align-items:center; }
+.course-breakdown .course-item .name { flex:1 }
+.course-breakdown .course-item .status { white-space:nowrap; }
+
