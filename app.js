@@ -777,144 +777,141 @@ const updateNoteStatus = async (courseId, unitId, noteId, newStatus, newConfiden
     }
 };
 
-const displayNotes = (unitId) => {
-    // If we are already listening to a unit's notes, stop it
+const displayNotes = async (unitId) => {
     if (unsubscribeNotes) {
         unsubscribeNotes();
+        unsubscribeNotes = null;
+    }
+    
+    unmemorizedNotesListDiv.innerHTML = '';
+    memorizedNotesListDiv.innerHTML = '';
+    
+    const notesCollection = collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`);
+    
+    // TEK SEFERLIK OKUMA
+    const snapshot = await getDocs(notesCollection);
+    
+    const categories = new Set();
+    let unmemorizedCount = 0;
+    let memorizedCount = 0;
+    const totalCount = snapshot.size;
+
+    if (snapshot.empty) {
+        unmemorizedNotesListDiv.innerHTML = '<p>Bu ünitede henüz not yok.</p>';
+        memorizedNotesListDiv.innerHTML = '';
+        notesStatsDisplay.innerHTML = '';
+        categoriesDatalist.innerHTML = '';
+        return;
     }
 
-    const notesQuery = query(collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`));
-    
-    unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-        unmemorizedNotesListDiv.innerHTML = '';
-        memorizedNotesListDiv.innerHTML = '';
-        
-        const categories = new Set();
-        let unmemorizedCount = 0;
-        let memorizedCount = 0;
-        const totalCount = snapshot.size;
+    snapshot.forEach(doc => {
+        const note = doc.data();
+        categories.add(note.category);
 
-        if (snapshot.empty) {
-            unmemorizedNotesListDiv.innerHTML = '<p>Bu ünitede henüz not yok.</p>';
-            memorizedNotesListDiv.innerHTML = ''; // Clear the other column too
-            notesStatsDisplay.innerHTML = ''; // Clear stats
-            categoriesDatalist.innerHTML = ''; // Clear datalist
-            return;
-        }
+        const noteId = doc.id;
+        const noteElement = document.createElement('div');
+        noteElement.classList.add('note-item');
+        noteElement.dataset.id = noteId;
 
-        snapshot.forEach(doc => {
-            const note = doc.data();
-            categories.add(note.category);
+        let actionsHtml = '';
+        let statsHtml = '';
+        const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
 
-            const noteId = doc.id;
-            const noteElement = document.createElement('div');
-            noteElement.classList.add('note-item');
-            noteElement.dataset.id = noteId;
-
-            let actionsHtml = '';
-            let statsHtml = '';
-            // Make the keyword bold in the note text for display
-            const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
-
-            if (note.status === 'Ezberlenmemiş') {
-                actionsHtml = `
-                    <button class="test-unmemorized-btn secondary-btn">Test Et</button>
-                    <button class="mark-memorized-btn primary-btn">Ezberledim</button>
-                `;
-                const correct = note.testCorrectCount || 0;
-                const incorrect = note.testIncorrectCount || 0;
-                statsHtml = `
-                    <div class="note-learning-stats">
-                        <span><b>Doğru:</b> ${correct}</span>
-                        <span><b>Yanlış:</b> ${incorrect}</span>
-                    </div>
-                `;
-            } else {
-                actionsHtml = `<button class="start-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel}%</p>`;
-            }
-
-            noteElement.innerHTML = `
-                <div class="note-content">
-                    <p>${displayText}</p>
-                    <span class="category">${note.category}</span>
-                    ${statsHtml}
-                </div>
-                <div class="note-info">
-                     <p><b>Durum:</b> ${note.status}</p>
-                     <div class="actions">
-                        ${actionsHtml}
-                    </div>
-                </div>
-                <div class="card-actions">
-                    <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
-                    <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
-                    <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
+        if (note.status === 'Ezberlenmemiş') {
+            actionsHtml = `
+                <button class="test-unmemorized-btn secondary-btn">Test Et</button>
+                <button class="mark-memorized-btn primary-btn">Ezberledim</button>
+            `;
+            const correct = note.testCorrectCount || 0;
+            const incorrect = note.testIncorrectCount || 0;
+            statsHtml = `
+                <div class="note-learning-stats">
+                    <span><b>Doğru:</b> ${correct}</span>
+                    <span><b>Yanlış:</b> ${incorrect}</span>
                 </div>
             `;
-            
-            // Append to the correct list
-            if (note.status === 'Ezberlenmemiş') {
-                unmemorizedNotesListDiv.appendChild(noteElement);
-                unmemorizedCount++;
-            } else {
-                memorizedNotesListDiv.appendChild(noteElement);
-                memorizedCount++;
-            }
+        } else {
+            actionsHtml = `<button class="start-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel}%</p>`;
+        }
 
-            // Add event listeners
-            noteElement.querySelector('.delete-note-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                deleteNote(noteId);
-            });
-
-            noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                openEditModal('note', noteId, note);
-            });
-            
-            noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
-                e.stopPropagation();
-                openAiChatModal(note.noteText);
-            });
-
-            const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
-            if (markMemorizedBtn) {
-                markMemorizedBtn.addEventListener('click', () => {
-                    // Reset stats when moving to memorized
-                    updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
-                });
-            }
-
-            const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
-            if (testBtn) {
-                testBtn.addEventListener('click', () => {
-                    startQuizSession([{ id: noteId, unitId: selectedUnitId, courseId: selectedCourseId, ...note }]);
-                });
-            }
-        });
-        
-        // Update categories datalist
-        categoriesDatalist.innerHTML = '';
-        categories.forEach(category => {
-            const option = document.createElement('option');
-            option.value = category;
-            categoriesDatalist.appendChild(option);
-        });
-
-        // Update stats in the notes header
-        notesStatsDisplay.innerHTML = `
-            <span class="stat-item">Toplam: ${totalCount}</span>
-            <span class="stat-item">Ezberlenmiş: ${memorizedCount}</span>
-            <span class="stat-item">Ezberlenmemiş: ${unmemorizedCount}</span>
+        noteElement.innerHTML = `
+            <div class="note-content">
+                <p>${displayText}</p>
+                <span class="category">${note.category}</span>
+                ${statsHtml}
+            </div>
+            <div class="note-info">
+                 <p><b>Durum:</b> ${note.status}</p>
+                 <div class="actions">
+                    ${actionsHtml}
+                </div>
+            </div>
+            <div class="card-actions">
+                <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
+                <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
+                <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
+            </div>
         `;
         
-        if (memorizedCount === 0) {
-            memorizedNotesListDiv.innerHTML = '<p>Henüz ezberlenmiş not yok.</p>';
+        if (note.status === 'Ezberlenmemiş') {
+            unmemorizedNotesListDiv.appendChild(noteElement);
+            unmemorizedCount++;
+        } else {
+            memorizedNotesListDiv.appendChild(noteElement);
+            memorizedCount++;
         }
-        if (unmemorizedCount === 0 && !snapshot.empty) {
-            unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
+
+        noteElement.querySelector('.delete-note-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await deleteNote(noteId);
+            await displayNotes(unitId); // Sayfayı yenile
+        });
+
+        noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditModal('note', noteId, note);
+        });
+        
+        noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openAiChatModal(note.noteText);
+        });
+
+        const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
+        if (markMemorizedBtn) {
+            markMemorizedBtn.addEventListener('click', async () => {
+                await updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
+                await displayNotes(unitId); // Sayfayı yenile
+            });
+        }
+
+        const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
+        if (testBtn) {
+            testBtn.addEventListener('click', () => {
+                startQuizSession([{ id: noteId, unitId: selectedUnitId, courseId: selectedCourseId, ...note }]);
+            });
         }
     });
+    
+    categoriesDatalist.innerHTML = '';
+    categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        categoriesDatalist.appendChild(option);
+    });
+
+    notesStatsDisplay.innerHTML = `
+        <span class="stat-item">Toplam: ${totalCount}</span>
+        <span class="stat-item">Ezberlenmiş: ${memorizedCount}</span>
+        <span class="stat-item">Ezberlenmemiş: ${unmemorizedCount}</span>
+    `;
+    
+    if (memorizedCount === 0) {
+        memorizedNotesListDiv.innerHTML = '<p>Henüz ezberlenmiş not yok.</p>';
+    }
+    if (unmemorizedCount === 0 && !snapshot.empty) {
+        unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
+    }
 };
 
 addNoteBtn.addEventListener('click', async () => {
