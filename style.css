@@ -928,3 +928,12 @@ textarea:focus {
     color: #f88f4b;
 }
 
+.course-breakdown {
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+.course-breakdown div {
+    margin: 3px 0;
+}
+
