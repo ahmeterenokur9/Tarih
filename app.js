@@ -100,13 +100,8 @@ const resetAddNoteForm = () => {
     selectedKeywordDisplay.style.fontStyle = 'italic';
 };
 
-
 // --- Streak Management ---
-const DAILY_TARGETS = [
-    { id: 'Vatandaşlık', name: 'Vatandaşlık', goal: 20 },
-    { id: 'Coğrafya', name: 'Coğrafya', goal: 50 },
-    { id: 'Tarih Dersim', name: 'Tarih', goal: 100 }
-];
+const DAILY_GOAL = 100;
 
 const displayStreak = async () => {
     try {
@@ -114,7 +109,7 @@ const displayStreak = async () => {
         const docSnap = await getDoc(statsRef);
         
         let streak = 0;
-        let progressMap = {}; 
+        let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
 
@@ -124,56 +119,51 @@ const displayStreak = async () => {
             lastStreakDate = data.lastStreakDate?.toDate();
             questionsTodayDate = data.questionsTodayDate?.toDate();
             
+            // Auto-reset streak if a day was missed
             const today = new Date();
-            // Yeni gün kontrolü: Eğer tarih bugünden farklıysa ilerlemeyi sıfırla
+            const yesterday = new Date();
+            yesterday.setDate(today.getDate() - 1);
+            if (lastStreakDate && !isSameDay(lastStreakDate, today) && !isSameDay(lastStreakDate, yesterday)) {
+                streak = 0;
+            }
+
+            // Reset daily question count if it's a new day
             if (questionsTodayDate && isSameDay(questionsTodayDate, today)) {
-                progressMap = data.categoryProgress || {};
+                questionsToday = data.questionsToday || 0;
             }
         }
         
-        // Ekranda görünecek metni oluştur
-        let progressText = "Hedefler: ";
-        let allGoalsMet = true;
-
-        DAILY_TARGETS.forEach(target => {
-            const current = progressMap[target.id] || 0;
-            progressText += `\n${target.name}: ${current}/${target.goal} | `;
-            if (current < target.goal) allGoalsMet = false;
-        });
-
         streakCountDisplay.textContent = `${streak} Gün`;
-        streakProgressText.style.whiteSpace = "pre-line"; // Alt alta gelmesini sağlar
-        streakProgressText.textContent = progressText;
+        streakProgressText.textContent = `Bugünkü Hedef: ${questionsToday} / ${DAILY_GOAL}`;
+        // Üstteki logonun yanındaki ateşi güncelle
+if (streak > 0) {
+    headerStreakDisplay.textContent = `🔥 ${streak}`;
+    headerStreakDisplay.style.display = 'block';
+} else {
+    headerStreakDisplay.style.display = 'none';
+}
 
-        // Üstteki ateş emojisi kontrolü
-        if (streak > 0) {
-            headerStreakDisplay.textContent = `🔥 ${streak}`;
-            headerStreakDisplay.style.display = 'block';
-        } else {
-            headerStreakDisplay.style.display = 'none';
-        }
-
-        // Eğer tüm hedefler tamamlandıysa kartın rengini yak
-        if (allGoalsMet && Object.keys(progressMap).length > 0) {
+        // Update card style based on today's goal completion, not the streak itself
+        if (questionsToday >= DAILY_GOAL) {
             streakContainer.classList.remove('inactive');
         } else {
             streakContainer.classList.add('inactive');
         }
 
     } catch (error) {
-        console.error("Hata:", error);
+        console.error("Error displaying streak: ", error);
+        streakCountDisplay.textContent = 'Hata';
     }
 };
 
-
-const updateStreak = async (questionsAnswered, categoryId) => {
+const updateStreak = async (questionsAnswered) => {
     const statsRef = doc(db, 'userStats', 'main');
     const today = new Date();
     
     try {
         const docSnap = await getDoc(statsRef);
         let currentStreak = 0;
-        let progressMap = {};
+        let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
 
@@ -183,44 +173,41 @@ const updateStreak = async (questionsAnswered, categoryId) => {
             lastStreakDate = data.lastStreakDate?.toDate();
             questionsTodayDate = data.questionsTodayDate?.toDate();
             
-            if (questionsTodayDate && isSameDay(questionsTodayDate, today)) {
-                progressMap = data.categoryProgress || {};
+            // Reset daily count if the last activity was before today
+            if (questionsTodayDate && !isSameDay(questionsTodayDate, today)) {
+                questionsToday = 0;
+            } else {
+                questionsToday = data.questionsToday || 0;
             }
         }
 
-        // İlgili kategorinin puanını artır
-        progressMap[categoryId] = (progressMap[categoryId] || 0) + questionsAnswered;
-
-        // Tüm hedefler doldu mu kontrol et
-        const allGoalsMet = DAILY_TARGETS.every(target => (progressMap[target.id] || 0) >= target.goal);
+        const goalMetBefore = questionsToday >= DAILY_GOAL;
+        questionsToday += questionsAnswered;
+        const goalMetAfter = questionsToday >= DAILY_GOAL;
 
         const dataToUpdate = {
-            categoryProgress: progressMap,
+            questionsToday: questionsToday,
             questionsTodayDate: Timestamp.fromDate(today)
         };
 
-        // Eğer hedefler bugün İLK DEFA tamamlandıysa seriyi artır
-        if (allGoalsMet) {
+        // If the goal was just met for the first time today
+        if (goalMetAfter && !goalMetBefore) {
             const yesterday = new Date();
             yesterday.setDate(today.getDate() - 1);
 
-            // Daha önce bugün seri artırılmadıysa
-            if (!lastStreakDate || !isSameDay(lastStreakDate, today)) {
-                if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
-                    currentStreak++;
-                } else {
-                    currentStreak = 1;
-                }
-                dataToUpdate.streak = currentStreak;
-                dataToUpdate.lastStreakDate = Timestamp.fromDate(today);
+            if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
+                currentStreak++; // Increment streak
+            } else {
+                currentStreak = 1; // Start a new streak
             }
+            dataToUpdate.streak = currentStreak;
+            dataToUpdate.lastStreakDate = Timestamp.fromDate(today);
         }
         
         await setDoc(statsRef, dataToUpdate, { merge: true });
-        displayStreak(); // Ekranı hemen güncelle
 
     } catch (error) {
-        console.error("Hata:", error);
+        console.error("Error updating streak: ", error);
     }
 };
 
@@ -780,17 +767,12 @@ const displayNotes = (unitId) => {
             });
 
             const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
-if (markMemorizedBtn) {
-    markMemorizedBtn.addEventListener('click', () => {
-        // Notun durumunu güncelle
-        updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
-
-        // --- PUAN BURADA EKLENİYOR ---
-        // Eğer ünitenin adı "Tarih Dersim" ise ona puan yaz, değilse dersin adına yaz.
-        const targetId = (selectedUnitName === 'Tarih Dersim') ? 'Tarih Dersim' : selectedCourseName;
-        updateStreak(1, targetId); 
-    });
-}
+            if (markMemorizedBtn) {
+                markMemorizedBtn.addEventListener('click', () => {
+                    // Reset stats when moving to memorized
+                    updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
+                });
+            }
 
             const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
             if (testBtn) {
