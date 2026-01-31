@@ -183,11 +183,25 @@ const displayStreak = async () => {
         }
 
         // Update card style based on today's goal completion, not the streak itself
-        if (questionsToday >= DAILY_GOAL) {
-            streakContainer.classList.remove('inactive');
-        } else {
-            streakContainer.classList.add('inactive');
-        }
+        // Ders minimumlarını kontrol et
+let courseConditionsMet = true;
+
+for (const requiredCourseId in COURSE_DAILY_MINIMUMS) {
+    const required = COURSE_DAILY_MINIMUMS[requiredCourseId];
+    const solved = dailyCourseStats[requiredCourseId] || 0;
+    if (solved < required) {
+        courseConditionsMet = false;
+        break;
+    }
+}
+
+// Kart stilini gerçek streak durumuna göre ayarla
+if (questionsToday >= DAILY_GOAL && courseConditionsMet) {
+    streakContainer.classList.remove('inactive');
+} else {
+    streakContainer.classList.add('inactive');
+}
+
 
         // --- Yeni: Ders Bazlı Gösterim ---
         if (courseBreakdownDiv) {
@@ -299,7 +313,7 @@ const updateStreak = async (quizQueue) => {
             questionsToday,
             questionsTodayDate: Timestamp.fromDate(todayDateOnly),
             streak,
-            lastStreakDate: Timestamp.fromDate(todayDateOnly),
+            lastStreakDate: lastStreakDate ? Timestamp.fromDate(lastStreakDate) : null,
             dailyCourseStats
         }, { merge: true });
 
@@ -1383,3 +1397,10 @@ const initializeApp = async () => {
 
 // --- Initial Load ---
 initializeApp();
+
+window.addEventListener('DOMContentLoaded', async () => {
+    await loadCourseNameMap();
+    await displayStreak();
+    displayCourses();
+});
+
