@@ -11,6 +11,8 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 const headerStreakDisplay = document.getElementById('header-streak-display');
 // --- DOM Elements ---
 // Course elements
+const courseBreakdownDiv = document.getElementById('course-breakdown');
+
 const coursesContainer = document.getElementById('courses-container');
 const courseNameInput = document.getElementById('course-name-input');
 const addCourseBtn = document.getElementById('add-course-btn');
@@ -110,51 +112,101 @@ const COURSE_DAILY_MINIMUMS = {
     
 };
 
+// courseId -> course name map (uygulama içinde kullanılacak)
+let courseNameMap = {};
+
+// Firestore'dan courses koleksiyonunu okuyup id->isim map'i oluşturur.
+// Çağrıldığında courseNameMap'i doldurur.
+const loadCourseNameMap = async () => {
+    try {
+        const snap = await getDocs(collection(db, 'courses'));
+        snap.forEach(d => {
+            const data = d.data();
+            courseNameMap[d.id] = data.name || d.id;
+        });
+    } catch (err) {
+        console.error("loadCourseNameMap error:", err);
+    }
+};
+
+
 const displayStreak = async () => {
     try {
         const statsRef = doc(db, 'userStats', 'main');
         const docSnap = await getDoc(statsRef);
-        
+
+        const today = new Date();
+        const yesterday = new Date();
+        yesterday.setDate(today.getDate() - 1);
+        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+        // Varsayılanlar
         let streak = 0;
         let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
+        let dailyCourseStats = {};
 
         if (docSnap.exists()) {
             const data = docSnap.data();
             streak = data.streak || 0;
-            lastStreakDate = data.lastStreakDate?.toDate();
-            questionsTodayDate = data.questionsTodayDate?.toDate();
-            
-            // Auto-reset streak if a day was missed
-            const today = new Date();
-            const yesterday = new Date();
-            yesterday.setDate(today.getDate() - 1);
-            if (lastStreakDate && !isSameDay(lastStreakDate, today) && !isSameDay(lastStreakDate, yesterday)) {
-                streak = 0;
+            // lastStreakDate ve questionsTodayDate mümkünse Date'e dönüştür
+            lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
+            questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
+
+            // Eğer questionsTodayDate bugünse questionsToday ve dailyCourseStats al
+            if (questionsTodayDate && isSameDay(questionsTodayDate, todayDateOnly)) {
+                questionsToday = data.questionsToday || 0;
+                dailyCourseStats = data.dailyCourseStats || {};
+            } else {
+                // Yeni gün, sıfır olarak göster
+                questionsToday = 0;
+                dailyCourseStats = {};
             }
 
-            // Reset daily question count if it's a new day
-            if (questionsTodayDate && isSameDay(questionsTodayDate, today)) {
-                questionsToday = data.questionsToday || 0;
+            // Auto-reset streak if a day was missed
+            if (lastStreakDate && !isSameDay(lastStreakDate, todayDateOnly) && !isSameDay(lastStreakDate, yesterday)) {
+                streak = 0;
             }
         }
-        
+
+        // Update UI numeric parts
         streakCountDisplay.textContent = `${streak} Gün`;
         streakProgressText.textContent = `Bugünkü Hedef: ${questionsToday} / ${DAILY_GOAL}`;
-        // Üstteki logonun yanındaki ateşi güncelle
-if (streak > 0) {
-    headerStreakDisplay.textContent = `🔥 ${streak}`;
-    headerStreakDisplay.style.display = 'block';
-} else {
-    headerStreakDisplay.style.display = 'none';
-}
+
+        // Header fire
+        if (streak > 0) {
+            headerStreakDisplay.textContent = `🔥 ${streak}`;
+            headerStreakDisplay.style.display = 'block';
+        } else {
+            headerStreakDisplay.style.display = 'none';
+        }
 
         // Update card style based on today's goal completion, not the streak itself
         if (questionsToday >= DAILY_GOAL) {
             streakContainer.classList.remove('inactive');
         } else {
             streakContainer.classList.add('inactive');
+        }
+
+        // --- Yeni: Ders Bazlı Gösterim ---
+        if (courseBreakdownDiv) {
+            let breakdownHTML = '<h4>Ders Bazlı</h4>';
+            // COURSE_DAILY_MINIMUMS anahtarları courseId şeklinde tanımlı (senin kodunda öyle)
+            for (const courseId in COURSE_DAILY_MINIMUMS) {
+                const required = COURSE_DAILY_MINIMUMS[courseId];
+                const solved = dailyCourseStats[courseId] || 0;
+                const done = solved >= required;
+                const courseName = courseNameMap[courseId] || courseId; // eğer map boşsa ID gösterilir
+
+                breakdownHTML += `
+                    <div class="course-item">
+                        <div class="name">${courseName}</div>
+                        <div class="status">${solved} / ${required} ${done ? '✅' : ''}</div>
+                    </div>
+                `;
+            }
+            courseBreakdownDiv.innerHTML = breakdownHTML;
         }
 
     } catch (error) {
@@ -1320,11 +1372,14 @@ addUnitBtn.addEventListener('click', async () => {
 });
 
 // --- App Initialization ---
-const initializeApp = () => {
+const initializeApp = async () => {
+    // courses isim map'ini yükle ki UI insan okunur isim göstersin
+    await loadCourseNameMap();
     displayCourses();
     showCoursesView();
-    displayStreak();
+    await displayStreak();
 };
+
 
 // --- Initial Load ---
 initializeApp();
