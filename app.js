@@ -165,9 +165,8 @@ const displayStreak = async () => {
             }
 
             // Auto-reset streak if a day was missed
-            if (lastStreakDate && !isSameDay(lastStreakDate, todayDateOnly) && !isSameDay(lastStreakDate, yesterday)) {
-                streak = 0;
-            }
+            
+            
         }
 
         // Update UI numeric parts
