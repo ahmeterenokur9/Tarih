@@ -103,6 +103,13 @@ const resetAddNoteForm = () => {
 // --- Streak Management ---
 const DAILY_GOAL = 100;
 
+const COURSE_DAILY_MINIMUMS = { 
+    "28osYiGGSkK2uONL2k1a": 20,
+    "Ny9BvgeK5iraMYAvV9RR": 50,
+    "ME0GYyrFQr1Oysycx4vS": 80
+    */
+};
+
 const displayStreak = async () => {
     try {
         const statsRef = doc(db, 'userStats', 'main');
@@ -156,60 +163,99 @@ if (streak > 0) {
     }
 };
 
-const updateStreak = async (questionsAnswered) => {
-    const statsRef = doc(db, 'userStats', 'main');
-    const today = new Date();
-    
+// Yeni updateStreak: quizQueue (array of note objects) bekler
+const updateStreak = async (quizQueue) => {
     try {
+        const statsRef = doc(db, 'userStats', 'main');
         const docSnap = await getDoc(statsRef);
-        let currentStreak = 0;
+
+        const today = new Date();
+        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        let streak = 0;
         let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
+        let dailyCourseStats = {}; // courseId -> count
 
         if (docSnap.exists()) {
             const data = docSnap.data();
-            currentStreak = data.streak || 0;
-            lastStreakDate = data.lastStreakDate?.toDate();
-            questionsTodayDate = data.questionsTodayDate?.toDate();
-            
-            // Reset daily count if the last activity was before today
-            if (questionsTodayDate && !isSameDay(questionsTodayDate, today)) {
-                questionsToday = 0;
-            } else {
-                questionsToday = data.questionsToday || 0;
+            streak = data.streak || 0;
+            lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
+            questionsToday = data.questionsToday || 0;
+            questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
+            dailyCourseStats = data.dailyCourseStats || {};
+        }
+
+        // Eğer kayıtlı sorularTodayDate bugünden farklı bir güne aitse -> sıfırla
+        if (!questionsTodayDate || !isSameDay(questionsTodayDate, todayDateOnly)) {
+            questionsToday = 0;
+            dailyCourseStats = {};
+        }
+
+        // 1) Toplam soruları ekle
+        const addedQuestions = Array.isArray(quizQueue) ? quizQueue.length : 0;
+        questionsToday += addedQuestions;
+
+        // 2) Her not için courseId bazlı sayacı artır
+        // Beklenen: quizQueue elemanı içinde courseId alanı var (ör: note.courseId)
+        if (Array.isArray(quizQueue)) {
+            quizQueue.forEach(note => {
+                const cid = note.courseId || note.course || note.courseName || null;
+                if (!cid) return; // eğer yoksa atla
+
+                if (!dailyCourseStats[cid]) dailyCourseStats[cid] = 0;
+                dailyCourseStats[cid] += 1;
+            });
+        }
+
+        // 3) Ders bazlı zorunlu minimumları kontrol et
+        let courseConditionsMet = true;
+        // COURSE_DAILY_MINIMUMS: courseId -> requiredCount
+        for (const requiredCourseId in COURSE_DAILY_MINIMUMS) {
+            const required = COURSE_DAILY_MINIMUMS[requiredCourseId];
+            const solved = dailyCourseStats[requiredCourseId] || 0;
+            if (solved < required) {
+                courseConditionsMet = false;
+                break;
             }
         }
 
-        const goalMetBefore = questionsToday >= DAILY_GOAL;
-        questionsToday += questionsAnswered;
-        const goalMetAfter = questionsToday >= DAILY_GOAL;
+        // 4) Final karar: tüm şartlar sağlanmalı
+        if (questionsToday >= DAILY_GOAL && courseConditionsMet) {
+            // Eğer bugün daha önce streak artışı yapılmadıysa (aynı gün tekrar artmasın)
+            if (!lastStreakDate || !isSameDay(lastStreakDate, todayDateOnly)) {
+                // Eğer dün de streak varsa artış, yoksa 1'den başla
+                const yesterday = new Date(todayDateOnly);
+                yesterday.setDate(todayDateOnly.getDate() - 1);
 
-        const dataToUpdate = {
-            questionsToday: questionsToday,
-            questionsTodayDate: Timestamp.fromDate(today)
-        };
-
-        // If the goal was just met for the first time today
-        if (goalMetAfter && !goalMetBefore) {
-            const yesterday = new Date();
-            yesterday.setDate(today.getDate() - 1);
-
-            if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
-                currentStreak++; // Increment streak
-            } else {
-                currentStreak = 1; // Start a new streak
+                if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
+                    streak = (streak || 0) + 1;
+                } else {
+                    streak = 1;
+                }
+                lastStreakDate = todayDateOnly;
             }
-            dataToUpdate.streak = currentStreak;
-            dataToUpdate.lastStreakDate = Timestamp.fromDate(today);
+        } else {
+            // Herhangi bir kısıt sağlanmıyorsa streak sıfırlanacak
+            streak = 0;
+            // lastStreakDate burada silinmez, ancak isterseniz de sıfırlanabilir
+            // lastStreakDate = null;
         }
-        
-        await setDoc(statsRef, dataToUpdate, { merge: true });
+
+        // 5) Firestore'a kaydet
+        await setDoc(statsRef, {
+            questionsToday,
+            questionsTodayDate: Timestamp.fromDate(todayDateOnly),
+            streak,
+            lastStreakDate: Timestamp.fromDate(todayDateOnly),
+            dailyCourseStats
+        }, { merge: true });
 
     } catch (error) {
-        console.error("Error updating streak: ", error);
+        console.error("Error in new updateStreak:", error);
     }
 };
+
 
 
 // --- SVG Icons ---
@@ -906,7 +952,7 @@ const showCoursesView = () => {
 const displayCurrentQuizQuestion = async () => {
     if (currentQuizIndex >= quizQueue.length) {
         // Quiz is over
-        await updateStreak(quizQueue.length); // Update streak with the number of questions answered
+        await updateStreak(quizQueue); // Update streak with the number of questions answered
         await displayStreak(); // Refresh the display
         
         quizQuestion.innerHTML = `Test Tamamlandı!`;
