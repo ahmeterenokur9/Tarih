@@ -1394,13 +1394,14 @@ const initializeApp = async () => {
     await displayStreak();
 };
 
-
-// --- Initial Load ---
-initializeApp();
-
 window.addEventListener('DOMContentLoaded', async () => {
     await loadCourseNameMap();
     await displayStreak();
     displayCourses();
 });
+
+
+// --- Initial Load ---
+initializeApp();
+
 
