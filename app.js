@@ -128,15 +128,10 @@ let courseNameMap = {};
 
 // Firestore'dan courses koleksiyonunu okuyup id->isim map'i oluşturur.
 // Çağrıldığında courseNameMap'i doldurur.
-const loadCourseNameMap = async () => {
-    try {
-        const snap = await getDocs(collection(db, 'courses'));
-        snap.forEach(d => {
-            const data = d.data();
-            courseNameMap[d.id] = data.name || d.id;
-        });
-    } catch (err) {
-        console.error("loadCourseNameMap error:", err);
+const loadCourseNameMap = () => {
+    // CACHE'DEN OKU - Firebase'e gitme!
+    for (const id in localCache.courses) {
+        courseNameMap[id] = localCache.courses[id].name || id;
     }
 };
 
@@ -200,43 +195,34 @@ const loadAllDataOnce = async () => {
 };
 
 
-const displayStreak = async () => {
+const displayStreak = () => {
     try {
-        const statsRef = doc(db, 'userStats', 'main');
-        const docSnap = await getDoc(statsRef);
+        // CACHE'DEN OKU
+        const data = localCache.userStats;
 
         const today = new Date();
         const yesterday = new Date();
         yesterday.setDate(today.getDate() - 1);
         const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-        // Varsayılanlar
         let streak = 0;
         let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
         let dailyCourseStats = {};
 
-        if (docSnap.exists()) {
-            const data = docSnap.data();
+        if (data) {
             streak = data.streak || 0;
-            // lastStreakDate ve questionsTodayDate mümkünse Date'e dönüştür
             lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
             questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
 
-            // Eğer questionsTodayDate bugünse questionsToday ve dailyCourseStats al
             if (questionsTodayDate && isSameDay(questionsTodayDate, todayDateOnly)) {
                 questionsToday = data.questionsToday || 0;
                 dailyCourseStats = data.dailyCourseStats || {};
             } else {
-                // Yeni gün, sıfır olarak göster
                 questionsToday = 0;
                 dailyCourseStats = {};
             }
-
-            // Auto-reset streak if a day was missed
-            
-            
         }
 
         // Update UI numeric parts
@@ -302,7 +288,6 @@ if (questionsToday >= DAILY_GOAL && courseConditionsMet) {
 const updateStreak = async (quizQueue) => {
     try {
         const statsRef = doc(db, 'userStats', 'main');
-        const docSnap = await getDoc(statsRef);
 
         const today = new Date();
         const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -310,10 +295,11 @@ const updateStreak = async (quizQueue) => {
         let questionsToday = 0;
         let lastStreakDate = null;
         let questionsTodayDate = null;
-        let dailyCourseStats = {}; // courseId -> count
+        let dailyCourseStats = {};
 
-        if (docSnap.exists()) {
-            const data = docSnap.data();
+        // CACHE'DEN OKU
+        const data = localCache.userStats;
+        if (data) {
             streak = data.streak || 0;
             lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
             questionsToday = data.questionsToday || 0;
@@ -378,13 +364,24 @@ const updateStreak = async (quizQueue) => {
         }
 
         // 5) Firestore'a kaydet
-        await setDoc(statsRef, {
+        const newStats = {
             questionsToday,
             questionsTodayDate: Timestamp.fromDate(todayDateOnly),
             streak,
             lastStreakDate: lastStreakDate ? Timestamp.fromDate(lastStreakDate) : null,
             dailyCourseStats
-        }, { merge: true });
+        };
+        await setDoc(statsRef, newStats, { merge: true });
+
+        // CACHE'İ GÜNCELLE
+        localCache.userStats = {
+            ...localCache.userStats,
+            questionsToday,
+            questionsTodayDate: todayDateOnly,
+            streak,
+            lastStreakDate: lastStreakDate,
+            dailyCourseStats
+        };
 
     } catch (error) {
         console.error("Error in new updateStreak:", error);
@@ -514,40 +511,27 @@ document.querySelectorAll('.global-rand-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
         if (!selectedCourseId) return;
         
-        const countToSelect = parseInt(btn.dataset.count); // Butondaki 20, 30 vs. değerini alır
-        const unitsRef = collection(db, `courses/${selectedCourseId}/units`);
-        
-        try {
-            const unitsSnapshot = await getDocs(unitsRef);
-            let allNotes = [];
+        const countToSelect = parseInt(btn.dataset.count);
+        let allNotes = [];
 
-            // Tüm üniteleri gez ve içindeki notları topla
-            for (const unitDoc of unitsSnapshot.docs) {
-                const notesSnapshot = await getDocs(collection(db, `courses/${selectedCourseId}/units/${unitDoc.id}/notes`));
-                notesSnapshot.forEach(noteDoc => {
-                    allNotes.push({ 
-                        id: noteDoc.id, 
-                        unitId: unitDoc.id, 
-                        courseId: selectedCourseId, 
-                        ...noteDoc.data() 
-                    });
-                });
-            }
-
-            if (allNotes.length === 0) {
-                alert('Bu derste henüz hiç not bulunamadı!');
-                return;
-            }
-
-            // Notları karıştır ve butondaki sayı kadarını seç
-            allNotes.sort(() => 0.5 - Math.random());
-            const selectedNotes = allNotes.slice(0, countToSelect);
-            
-            startQuizSession(selectedNotes);
-        } catch (error) {
-            console.error("Genel test hatası: ", error);
-            alert("Test başlatılırken bir hata oluştu.");
+        // CACHE'DEN OKU
+        const courseUnits = localCache.notes[selectedCourseId] || {};
+        for (const unitId in courseUnits) {
+            const unitNotes = courseUnits[unitId] || {};
+            Object.values(unitNotes).forEach(note => {
+                allNotes.push({ ...note, unitId: unitId, courseId: selectedCourseId });
+            });
         }
+
+        if (allNotes.length === 0) {
+            alert('Bu derste henüz hiç not bulunamadı!');
+            return;
+        }
+
+        allNotes.sort(() => 0.5 - Math.random());
+        const selectedNotes = allNotes.slice(0, countToSelect);
+        
+        startQuizSession(selectedNotes);
     });
 });
 
@@ -595,47 +579,39 @@ searchMemorizedInput.addEventListener('input', (e) => {
 notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('batch-btn')) {
         const button = e.target;
-        const type = button.dataset.type; // HTML'deki data-type: "10" veya "all"
+        const type = button.dataset.type;
 
-        // Statü fark etmeksizin ünitedeki tüm notları referans alıyoruz
-        const notesRef = collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`);
-        
-        try {
-            const snapshot = await getDocs(notesRef);
-            let allUnitNotes = [];
-            
-            snapshot.forEach(doc => {
-                allUnitNotes.push({ 
-                    id: doc.id, 
-                    unitId: selectedUnitId, 
-                    courseId: selectedCourseId, 
-                    ...doc.data() 
-                });
-            });
+        // CACHE'DEN OKU
+        const notesObj = localCache.notes[selectedCourseId]?.[selectedUnitId] || {};
+        let allUnitNotes = Object.values(notesObj).map(note => ({
+            ...note,
+            unitId: selectedUnitId,
+            courseId: selectedCourseId
+        }));
 
-            if (allUnitNotes.length === 0) {
-                alert('Bu ünitede henüz test edilecek not bulunamadı!');
+        if (allUnitNotes.length === 0) {
+            alert('Bu ünitede henüz test edilecek not bulunamadı!');
+            return;
+        }
+
+        allUnitNotes.sort(() => 0.5 - Math.random());
+
+        let selectedNotes;
+        if (type === 'all') {
+            selectedNotes = allUnitNotes;
+        } else if (type === 'critical') {
+            // %50 altı güven seviyesi olan ezberlenmiş notlar
+            selectedNotes = allUnitNotes.filter(n => n.status === 'Ezberlenmiş' && (n.confidenceLevel || 0) < 50);
+            if (selectedNotes.length === 0) {
+                alert('Kritik not bulunamadı!');
                 return;
             }
-
-            // 1. Tüm notları tamamen rastgele karıştır
-            allUnitNotes.sort(() => 0.5 - Math.random());
-
-            // 2. Seçime göre notları ayır
-            let selectedNotes;
-            if (type === 'all') {
-                selectedNotes = allUnitNotes;
-            } else {
-                const limit = parseInt(type, 10); // data-type="10" ise 10 tane al
-                selectedNotes = allUnitNotes.slice(0, limit);
-            }
-            
-            startQuizSession(selectedNotes);
-
-        } catch (error) {
-            console.error("Notlar çekilirken hata oluştu: ", error);
-            alert('Test başlatılamadı, bir hata oluştu.');
+        } else {
+            const limit = parseInt(type, 10);
+            selectedNotes = allUnitNotes.slice(0, limit);
         }
+        
+        startQuizSession(selectedNotes);
     }
 });
 
@@ -651,17 +627,27 @@ modalSaveBtn.addEventListener('click', async () => {
 
     try {
         if (type === 'unit') {
-            await updateDoc(doc(db, 'units', id), { name: newText });
+            await updateDoc(doc(db, `courses/${selectedCourseId}/units`, id), { name: newText });
+            // CACHE'İ GÜNCELLE
+            if (localCache.units[selectedCourseId]?.[id]) {
+                localCache.units[selectedCourseId][id].name = newText;
+            }
         } else if (type === 'note') {
-            // Check if the original keyword is still in the new text
             if (!newText.includes(originalData.keyword)) {
                 if (!confirm('Anahtar kelime artık not içinde bulunmuyor. Bu, test işlevini bozabilir. Yine de devam etmek istiyor musunuz?')) {
                     return;
                 }
             }
             await updateDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, id), { noteText: newText });
+            // CACHE'İ GÜNCELLE
+            if (localCache.notes[selectedCourseId]?.[selectedUnitId]?.[id]) {
+                localCache.notes[selectedCourseId][selectedUnitId][id].noteText = newText;
+            }
         }
         closeEditModal();
+        // Notlar görünümdeyse yenile
+        if (type === 'note') displayNotes(selectedUnitId);
+        if (type === 'unit') displayUnits(selectedCourseId);
     } catch (error) {
         console.error(`Error updating ${type}:`, error);
         alert('Güncelleme sırasında bir hata oluştu.');
@@ -672,30 +658,28 @@ modalSaveBtn.addEventListener('click', async () => {
 // --- Confidence Level Decay Logic ---
 
 const checkAndUpdateConfidenceLevels = async (courseId, unitId) => {
-    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
-    const q = query(notesRef, where('status', '==', 'Ezberlenmiş'));
-    const snapshot = await getDocs(q);
+    // CACHE'DEN OKU
+    const notesObj = localCache.notes[courseId]?.[unitId] || {};
+    const memorizedNotes = Object.entries(notesObj).filter(([id, note]) => note.status === 'Ezberlenmiş');
 
-    if (snapshot.empty) return;
+    if (memorizedNotes.length === 0) return;
 
     const batch = writeBatch(db);
     const today = new Date();
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    let hasChanges = false;
 
-    snapshot.forEach(document => {
-        const note = document.data();
-        const noteId = document.id;
-        
-        // --- Core Fix: Check if decay was already applied today ---
-        if (note.decayLastAppliedAt && isSameDay(note.decayLastAppliedAt.toDate(), today)) {
-            return; // Skip this note, decay already applied for today.
+    memorizedNotes.forEach(([noteId, note]) => {
+        // Decay bugün yapıldıysa atla
+        const decayDate = note.decayLastAppliedAt?.toDate ? note.decayLastAppliedAt.toDate() : (note.decayLastAppliedAt || null);
+        if (decayDate && isSameDay(decayDate, today)) {
+            return;
         }
 
-        if (!note.lastReviewedAt || typeof note.lastReviewedAt.toDate !== 'function') return;
+        const lastReviewed = note.lastReviewedAt?.toDate ? note.lastReviewedAt.toDate() : (note.lastReviewedAt || null);
+        if (!lastReviewed) return;
         
-        const lastReviewed = note.lastReviewedAt.toDate();
         const lastReviewedStart = new Date(lastReviewed.getFullYear(), lastReviewed.getMonth(), lastReviewed.getDate());
-
         const msPerDay = 1000 * 60 * 60 * 24;
         const daysPassed = Math.round((todayStart - lastReviewedStart) / msPerDay);
 
@@ -705,21 +689,22 @@ const checkAndUpdateConfidenceLevels = async (courseId, unitId) => {
             const docRef = doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId);
 
             if (newConfidence < 15) {
-                batch.update(docRef, {
-                    status: 'Ezberlenmemiş',
-                    confidenceLevel: 0,
-                    decayLastAppliedAt: today // Stamp it
-                });
+                batch.update(docRef, { status: 'Ezberlenmemiş', confidenceLevel: 0, decayLastAppliedAt: today });
+                // CACHE'İ GÜNCELLE
+                localCache.notes[courseId][unitId][noteId].status = 'Ezberlenmemiş';
+                localCache.notes[courseId][unitId][noteId].confidenceLevel = 0;
+                localCache.notes[courseId][unitId][noteId].decayLastAppliedAt = today;
             } else {
-                batch.update(docRef, {
-                    confidenceLevel: newConfidence,
-                    decayLastAppliedAt: today // Stamp it
-                });
+                batch.update(docRef, { confidenceLevel: newConfidence, decayLastAppliedAt: today });
+                // CACHE'İ GÜNCELLE
+                localCache.notes[courseId][unitId][noteId].confidenceLevel = newConfidence;
+                localCache.notes[courseId][unitId][noteId].decayLastAppliedAt = today;
             }
+            hasChanges = true;
         }
     });
 
-    if (!batch.empty) {
+    if (hasChanges) {
         await batch.commit();
     }
 };
@@ -727,15 +712,12 @@ const checkAndUpdateConfidenceLevels = async (courseId, unitId) => {
 
 // --- CRUD Operations ---
 
-// Get Stats for a Unit
-const getUnitStats = async (courseId, unitId) => {
-    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
-    const snapshot = await getDocs(notesRef);
-    const totalCount = snapshot.size;
-    
-    const memorizedQuery = query(notesRef, where('status', '==', 'Ezberlenmiş'));
-    const memorizedSnapshot = await getDocs(memorizedQuery);
-    const memorizedCount = memorizedSnapshot.size;
+// Get Stats for a Unit - CACHE'DEN
+const getUnitStats = (courseId, unitId) => {
+    const notesObj = localCache.notes[courseId]?.[unitId] || {};
+    const notesArray = Object.values(notesObj);
+    const totalCount = notesArray.length;
+    const memorizedCount = notesArray.filter(n => n.status === 'Ezberlenmiş').length;
     
     return {
         total: totalCount,
@@ -744,17 +726,15 @@ const getUnitStats = async (courseId, unitId) => {
     };
 };
 
-// Get Stats for a Course
-const getCourseStats = async (courseId) => {
-    const unitsRef = collection(db, `courses/${courseId}/units`);
-    const unitsSnapshot = await getDocs(unitsRef);
-    const unitCount = unitsSnapshot.size;
+// Get Stats for a Course - CACHE'DEN
+const getCourseStats = (courseId) => {
+    const units = localCache.units[courseId] || {};
+    const unitCount = Object.keys(units).length;
     let totalNoteCount = 0;
 
-    for (const unitDoc of unitsSnapshot.docs) {
-        const notesRef = collection(db, `courses/${courseId}/units/${unitDoc.id}/notes`);
-        const notesSnapshot = await getDocs(notesRef);
-        totalNoteCount += notesSnapshot.size;
+    for (const unitId in units) {
+        const notesObj = localCache.notes[courseId]?.[unitId] || {};
+        totalNoteCount += Object.keys(notesObj).length;
     }
 
     return {
@@ -764,16 +744,28 @@ const getCourseStats = async (courseId) => {
 };
 
 
-// Delete Course
 const deleteCourse = async (courseId) => {
     if (!confirm('Bu dersi ve içindeki tüm üniteleri/notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
     try {
-        // This is complex. We need to delete all notes in all units, then all units, then the course.
-        const unitsSnapshot = await getDocs(collection(db, `courses/${courseId}/units`));
-        for (const unitDoc of unitsSnapshot.docs) {
-            await deleteUnit(courseId, unitDoc.id, false); // Call deleteUnit without confirmation
+        // Cache'den tüm ünitelerin notlarını sil
+        const units = localCache.units[courseId] || {};
+        for (const unitId in units) {
+            const notesSnapshot = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
+            const deleteBatch = writeBatch(db);
+            notesSnapshot.forEach(d => { deleteBatch.delete(d.ref); });
+            await deleteBatch.commit();
+
+            await deleteDoc(doc(db, `courses/${courseId}/units`, unitId));
         }
         await deleteDoc(doc(db, 'courses', courseId));
+
+        // CACHE'DEN SİL
+        delete localCache.courses[courseId];
+        delete localCache.units[courseId];
+        delete localCache.notes[courseId];
+
+        // Ekranı yenile
+        displayCourses();
     } catch (error) {
         console.error("Error deleting course: ", error);
         alert('Ders silinirken bir hata oluştu.');
@@ -781,20 +773,22 @@ const deleteCourse = async (courseId) => {
 };
 
 
-// Delete Unit
 const deleteUnit = async (courseId, unitId, showConfirmation = true) => {
     if (showConfirmation && !confirm('Bu üniteyi ve içindeki tüm notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
     try {
-        // First, delete all notes in the subcollection
         const notesSnapshot = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
         const deleteBatch = writeBatch(db);
-        notesSnapshot.forEach(doc => {
-            deleteBatch.delete(doc.ref);
-        });
+        notesSnapshot.forEach(d => { deleteBatch.delete(d.ref); });
         await deleteBatch.commit();
         
-        // Then, delete the unit itself
         await deleteDoc(doc(db, `courses/${courseId}/units`, unitId));
+
+        // CACHE'DEN SİL
+        if (localCache.units[courseId]) delete localCache.units[courseId][unitId];
+        if (localCache.notes[courseId]) delete localCache.notes[courseId][unitId];
+
+        // Ekranı yenile
+        displayUnits(courseId);
     } catch (error) {
         console.error("Error deleting unit: ", error);
         alert('Ünite silinirken bir hata oluştu.');
@@ -1138,32 +1132,28 @@ const displayCurrentQuizQuestion = async () => {
     const questionText = noteToTest.noteText.replace(noteToTest.keyword, '_______');
     quizQuestion.innerHTML = `Soru ${currentQuizIndex + 1} / ${quizQueue.length}<br><br>"${questionText}"`;
 
-    // --- Advanced Distractor Fetching Logic ---
+    // --- Distractor Logic: CACHE'DEN OKU ---
     const distractors = new Set();
     const correctKeywordLower = noteToTest.keyword.toLowerCase();
 
-    // 1. Try to get from the same category first
-    const categoryQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`), where('category', '==', noteToTest.category));
-    const categorySnapshot = await getDocs(categoryQuery);
-    categorySnapshot.forEach(doc => {
-        const keyword = doc.data().keyword;
-        if (distractors.size < 3 && keyword.toLowerCase() !== correctKeywordLower) {
-            distractors.add(keyword);
+    // CACHE'den aynı ünitedeki tüm notları al
+    const unitNotes = Object.values(localCache.notes[noteToTest.courseId]?.[noteToTest.unitId] || {});
+
+    // 1. Önce aynı kategoriden bul
+    unitNotes.forEach(note => {
+        if (distractors.size < 3 && note.category === noteToTest.category && note.keyword.toLowerCase() !== correctKeywordLower) {
+            distractors.add(note.keyword);
         }
     });
 
-    // 2. If not enough, get more from the entire unit
+    // 2. Yetmezse tüm üniteden bul
     if (distractors.size < 3) {
-        const unitQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`));
-        const unitSnapshot = await getDocs(unitQuery);
-        
         const existingOptionsLower = new Set([...distractors].map(d => d.toLowerCase()));
         existingOptionsLower.add(correctKeywordLower);
 
-        unitSnapshot.forEach(doc => {
-            const keyword = doc.data().keyword;
-            if (distractors.size < 3 && !existingOptionsLower.has(keyword.toLowerCase())) {
-                distractors.add(keyword);
+        unitNotes.forEach(note => {
+            if (distractors.size < 3 && !existingOptionsLower.has(note.keyword.toLowerCase())) {
+                distractors.add(note.keyword);
             }
         });
     }
@@ -1272,23 +1262,19 @@ const renderCourseCard = (courseId, course) => {
 
     coursesListDiv.appendChild(courseElement);
 
-    // Asynchronously fetch stats
-    getCourseStats(courseId).then(stats => {
-        const existingCard = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
-        if (existingCard) {
-            const statsDiv = existingCard.querySelector('.course-stats');
-            statsDiv.innerHTML = `
-                <div class="stat-item">
-                    <span>Üniteler</span>
-                    <span class="stat-value">${stats.units}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Notlar</span>
-                    <span class="stat-value">${stats.notes}</span>
-                </div>
-            `;
-        }
-    });
+    // CACHE'DEN stats al (artık sync, Firebase'e gitmiyor)
+    const stats = getCourseStats(courseId);
+    const statsDiv = courseElement.querySelector('.course-stats');
+    statsDiv.innerHTML = `
+        <div class="stat-item">
+            <span>Üniteler</span>
+            <span class="stat-value">${stats.units}</span>
+        </div>
+        <div class="stat-item">
+            <span>Notlar</span>
+            <span class="stat-value">${stats.notes}</span>
+        </div>
+    `;
 };
 
 const updateCourseCard = (courseId, course) => {
@@ -1366,28 +1352,23 @@ const renderUnitCard = (unitId, unit) => {
 
     unitsListDiv.appendChild(unitElement);
 
-    // Asynchronously fetch stats and update the card
-    getUnitStats(selectedCourseId, unitId).then(stats => {
-        // Make sure the card is still in the DOM
-        const existingCard = unitsListDiv.querySelector(`[data-unit-id="${unitId}"]`);
-        if (existingCard) {
-            const statsDiv = existingCard.querySelector('.unit-stats');
-            statsDiv.innerHTML = `
-                <div class="stat-item">
-                    <span>Toplam</span>
-                    <span class="stat-value">${stats.total}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Ezberlenmiş</span>
-                    <span class="stat-value">${stats.memorized}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Ezberlenmemiş</span>
-                    <span class="stat-value">${stats.unmemorized}</span>
-                </div>
-            `;
-        }
-    });
+    // CACHE'DEN stats al (artık sync, Firebase'e gitmiyor)
+    const stats = getUnitStats(selectedCourseId, unitId);
+    const statsDiv = unitElement.querySelector('.unit-stats');
+    statsDiv.innerHTML = `
+        <div class="stat-item">
+            <span>Toplam</span>
+            <span class="stat-value">${stats.total}</span>
+        </div>
+        <div class="stat-item">
+            <span>Ezberlenmiş</span>
+            <span class="stat-value">${stats.memorized}</span>
+        </div>
+        <div class="stat-item">
+            <span>Ezberlenmemiş</span>
+            <span class="stat-value">${stats.unmemorized}</span>
+        </div>
+    `;
 };
 
 const updateUnitCard = (unitId, unit) => {
@@ -1426,11 +1407,20 @@ addCourseBtn.addEventListener('click', async () => {
     const courseName = courseNameInput.value.trim();
     if (courseName) {
         try {
-            await addDoc(collection(db, 'courses'), {
+            const docRef = await addDoc(collection(db, 'courses'), {
                 name: courseName,
                 createdAt: new Date()
             });
-            courseNameInput.value = ''; 
+            
+            // CACHE'E EKLE
+            localCache.courses[docRef.id] = { id: docRef.id, name: courseName, createdAt: new Date() };
+            localCache.units[docRef.id] = {};
+            localCache.notes[docRef.id] = {};
+            courseNameMap[docRef.id] = courseName;
+
+            courseNameInput.value = '';
+            // Ekranı yenile
+            displayCourses();
         } catch (error) {
             console.error("Error adding course: ", error);
         }
@@ -1441,11 +1431,18 @@ addUnitBtn.addEventListener('click', async () => {
     const unitName = unitNameInput.value.trim();
     if (unitName && selectedCourseId) {
         try {
-            await addDoc(collection(db, `courses/${selectedCourseId}/units`), {
+            const docRef = await addDoc(collection(db, `courses/${selectedCourseId}/units`), {
                 name: unitName,
                 createdAt: new Date()
             });
-            unitNameInput.value = ''; 
+
+            // CACHE'E EKLE
+            localCache.units[selectedCourseId][docRef.id] = { id: docRef.id, name: unitName, createdAt: new Date() };
+            localCache.notes[selectedCourseId][docRef.id] = {};
+
+            unitNameInput.value = '';
+            // Ekranı yenile
+            displayUnits(selectedCourseId);
         } catch (error) {
             console.error("Error adding unit: ", error);
         }
@@ -1459,10 +1456,11 @@ const initializeApp = async () => {
     // ÖNEMLİ: İLK ÖNCE TÜM VERİYİ ÇEK!
     await loadAllDataOnce();
     
-    await loadCourseNameMap();
+    // Cache yüklendikten sonra map oluştur (Firebase'e gitmez)
+    loadCourseNameMap();
     displayCourses();
     showCoursesView();
-    await displayStreak();
+    displayStreak();
     
     console.log("✅ Uygulama hazır!");
 };
@@ -1470,5 +1468,3 @@ const initializeApp = async () => {
 
 // --- Initial Load ---
 initializeApp();
-
-
