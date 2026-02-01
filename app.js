@@ -85,6 +85,17 @@ let unsubscribeNotes = null; // To stop listening to previous unit's notes
 let currentEdit = { type: null, id: null, originalData: null }; // To manage what we are editing
 let currentAiChatNote = null; // To store context for AI chat
 let quizQueue = [];
+
+// --- LOCAL CACHE (Yerel Önbellek) ---
+let localCache = {
+    courses: {},      // courseId: { name, data }
+    units: {},        // courseId: { unitId: { name, data } }
+    notes: {},        // courseId: { unitId: { noteId: note } }
+    userStats: null,  // Seri bilgisi
+    lastSync: null    // Son güncelleme zamanı
+};
+let cacheLoaded = false; // Cache yüklendi mi?
+
 let currentQuizIndex = 0;
 
 // --- Helper Functions ---
@@ -126,6 +137,65 @@ const loadCourseNameMap = async () => {
         });
     } catch (err) {
         console.error("loadCourseNameMap error:", err);
+    }
+};
+
+// TEK SEFERLIK BÜTÜN VERİYİ ÇEK
+const loadAllDataOnce = async () => {
+    if (cacheLoaded) {
+        console.log("✅ Cache zaten yüklü, Firebase'e gitmiyoruz!");
+        return; // Zaten yüklendi, tekrar çekme!
+    }
+    
+    console.log("📥 İlk yükleme başlıyor... Tüm veriler çekiliyor...");
+    
+    try {
+        // 1. COURSES (Dersler)
+        const coursesSnap = await getDocs(collection(db, 'courses'));
+        coursesSnap.forEach(doc => {
+            localCache.courses[doc.id] = { id: doc.id, ...doc.data() };
+            localCache.units[doc.id] = {};
+            localCache.notes[doc.id] = {};
+        });
+        
+        // 2. UNITS (Üniteler) - Her ders için
+        for (const courseId in localCache.courses) {
+            const unitsSnap = await getDocs(collection(db, `courses/${courseId}/units`));
+            unitsSnap.forEach(doc => {
+                localCache.units[courseId][doc.id] = { id: doc.id, ...doc.data() };
+                localCache.notes[courseId][doc.id] = {};
+            });
+        }
+        
+        // 3. NOTES (Notlar) - Her ünite için
+        for (const courseId in localCache.units) {
+            for (const unitId in localCache.units[courseId]) {
+                const notesSnap = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
+                notesSnap.forEach(doc => {
+                    localCache.notes[courseId][unitId][doc.id] = { id: doc.id, ...doc.data() };
+                });
+            }
+        }
+        
+        // 4. USER STATS (Seri)
+        const statsSnap = await getDoc(doc(db, 'userStats', 'main'));
+        if (statsSnap.exists()) {
+            localCache.userStats = statsSnap.data();
+        }
+        
+        localCache.lastSync = new Date();
+        cacheLoaded = true;
+        console.log("✅ TÜM VERİLER YÜKLENDİ! Artık Firebase'e gitmeyeceğiz!");
+        console.log("📊 Yüklenen:", {
+            dersler: Object.keys(localCache.courses).length,
+            toplam_üniteler: Object.values(localCache.units).reduce((sum, units) => sum + Object.keys(units).length, 0),
+            toplam_notlar: Object.values(localCache.notes).reduce((sum, course) => 
+                sum + Object.values(course).reduce((s2, unit) => s2 + Object.keys(unit).length, 0), 0)
+        });
+        
+    } catch (error) {
+        console.error("❌ Veri yükleme hatası:", error);
+        alert("Veriler yüklenirken hata oluştu. Sayfayı yenileyin.");
     }
 };
 
@@ -735,7 +805,14 @@ const deleteUnit = async (courseId, unitId, showConfirmation = true) => {
 const deleteNote = async (noteId) => {
     if (!confirm('Bu notu silmek istediğinizden emin misiniz?')) return;
     try {
+        // Firebase'den sil
         await deleteDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, noteId));
+        
+        // CACHE'DEN SİL
+        if (localCache.notes[selectedCourseId]?.[selectedUnitId]?.[noteId]) {
+            delete localCache.notes[selectedCourseId][selectedUnitId][noteId];
+        }
+
     } catch (error) {
         console.error("Error deleting note: ", error);
         alert('Not silinirken bir hata oluştu.');
@@ -754,24 +831,27 @@ noteTextInput.addEventListener('mouseup', () => {
     }
 });
 
-const updateNoteStatus = async (courseId, unitId, noteId, newStatus, newConfidence, newStats = null) => {
-    if (!courseId || !unitId || !noteId) return;
-
-    const noteRef = doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId);
+const updateNoteStatus = async (courseId, unitId, noteId, newStatus, newConfidence, testStats = null) => {
     try {
         const updateData = {
             status: newStatus,
             confidenceLevel: newConfidence,
-            lastReviewedAt: new Date(),
-            decayLastAppliedAt: new Date()
+            lastReviewedAt: new Date()
         };
 
-        if (newStats) {
-            updateData.testCorrectCount = newStats.correct;
-            updateData.testIncorrectCount = newStats.incorrect;
+        if (testStats) {
+            updateData.testCorrectCount = testStats.correct;
+            updateData.testIncorrectCount = testStats.incorrect;
         }
 
-        await updateDoc(noteRef, updateData);
+        // Firebase'e yaz
+        await updateDoc(doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId), updateData);
+        
+        // CACHE'İ GÜNCELLE
+        if (localCache.notes[courseId]?.[unitId]?.[noteId]) {
+            Object.assign(localCache.notes[courseId][unitId][noteId], updateData);
+        }
+
     } catch (error) {
         console.error("Error updating note status: ", error);
     }
@@ -786,17 +866,16 @@ const displayNotes = async (unitId) => {
     unmemorizedNotesListDiv.innerHTML = '';
     memorizedNotesListDiv.innerHTML = '';
     
-    const notesCollection = collection(db, `courses/${selectedCourseId}/units/${unitId}/notes`);
-    
-    // TEK SEFERLIK OKUMA
-    const snapshot = await getDocs(notesCollection);
+    // CACHE'DEN OKU (Firebase'e gitme!)
+    const notesObj = localCache.notes[selectedCourseId]?.[unitId] || {};
+    const notesArray = Object.values(notesObj);
     
     const categories = new Set();
     let unmemorizedCount = 0;
     let memorizedCount = 0;
-    const totalCount = snapshot.size;
+    const totalCount = notesArray.length;
 
-    if (snapshot.empty) {
+    if (totalCount === 0) {
         unmemorizedNotesListDiv.innerHTML = '<p>Bu ünitede henüz not yok.</p>';
         memorizedNotesListDiv.innerHTML = '';
         notesStatsDisplay.innerHTML = '';
@@ -804,11 +883,10 @@ const displayNotes = async (unitId) => {
         return;
     }
 
-    snapshot.forEach(doc => {
-        const note = doc.data();
+    notesArray.forEach(note => {
         categories.add(note.category);
 
-        const noteId = doc.id;
+        const noteId = note.id;
         const noteElement = document.createElement('div');
         noteElement.classList.add('note-item');
         noteElement.dataset.id = noteId;
@@ -864,7 +942,7 @@ const displayNotes = async (unitId) => {
         noteElement.querySelector('.delete-note-btn').addEventListener('click', async (e) => {
             e.stopPropagation();
             await deleteNote(noteId);
-            await displayNotes(unitId); // Sayfayı yenile
+            displayNotes(unitId); // Sayfa yenile (Cache'den)
         });
 
         noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
@@ -881,7 +959,7 @@ const displayNotes = async (unitId) => {
         if (markMemorizedBtn) {
             markMemorizedBtn.addEventListener('click', async () => {
                 await updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
-                await displayNotes(unitId); // Sayfayı yenile
+                displayNotes(unitId); // Sayfa yenile (Cache'den)
             });
         }
 
@@ -909,7 +987,7 @@ const displayNotes = async (unitId) => {
     if (memorizedCount === 0) {
         memorizedNotesListDiv.innerHTML = '<p>Henüz ezberlenmiş not yok.</p>';
     }
-    if (unmemorizedCount === 0 && !snapshot.empty) {
+    if (unmemorizedCount === 0 && totalCount > 0) {
         unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
     }
 };
@@ -919,28 +997,38 @@ addNoteBtn.addEventListener('click', async () => {
     const category = noteCategoryInput.value.trim();
 
     if (noteText && category && selectedKeyword && selectedCourseId && selectedUnitId) {
-        // Check if the selected keyword is actually in the note text
         if (!noteText.includes(selectedKeyword)) {
             alert('Lütfen not metninin içinden bir anahtar kelime seçin.');
             return;
         }
 
         try {
-            await addDoc(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), {
+            const newNote = {
                 noteText: noteText,
                 keyword: selectedKeyword,
                 category: category,
-                status: 'Ezberlenmemiş', // Initial status
-                confidenceLevel: 0, // Initial confidence
+                status: 'Ezberlenmemiş',
+                confidenceLevel: 0,
                 createdAt: new Date(),
                 lastReviewedAt: new Date(),
-                decayLastAppliedAt: new Date(), // Initialize the decay stamp
-                testCorrectCount: 0, // Initialize stats
-                testIncorrectCount: 0 // Initialize stats
-            });
+                decayLastAppliedAt: new Date(),
+                testCorrectCount: 0,
+                testIncorrectCount: 0
+            };
+            
+            // Firebase'e ekle
+            const docRef = await addDoc(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), newNote);
+            
+            // CACHE'E EKLE
+            newNote.id = docRef.id;
+            localCache.notes[selectedCourseId][selectedUnitId][docRef.id] = newNote;
+            
             resetAddNoteForm();
-            addNoteContainer.style.display = 'none'; // Hide form on successful add
+            addNoteContainer.style.display = 'none';
             showAddNoteFormBtn.textContent = '+ Yeni Not Ekle';
+            
+            // Sayfayı yenile (Cache'den!)
+            displayNotes(selectedUnitId);
 
         } catch (error) {
             console.error("Error adding note: ", error);
@@ -1221,19 +1309,11 @@ const removeCourseCard = (courseId) => {
 };
 
 const displayCourses = () => {
-    const coursesCollection = collection(db, 'courses');
-    onSnapshot(coursesCollection, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-                renderCourseCard(change.doc.id, change.doc.data());
-            }
-            if (change.type === "modified") {
-                // updateCourseCard(change.doc.id, change.doc.data());
-            }
-            if (change.type === "removed") {
-                removeCourseCard(change.doc.id);
-            }
-        });
+    coursesListDiv.innerHTML = '';
+    
+    // CACHE'DEN OKU
+    Object.values(localCache.courses).forEach(course => {
+        renderCourseCard(course.id, course);
     });
 };
 
@@ -1333,21 +1413,12 @@ const displayUnits = (courseId) => {
     if (unsubscribeUnits) {
         unsubscribeUnits();
     }
-    unitsListDiv.innerHTML = ''; // Clear previous units
+    unitsListDiv.innerHTML = '';
 
-    const unitsCollection = collection(db, `courses/${courseId}/units`);
-    unsubscribeUnits = onSnapshot(unitsCollection, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-                renderUnitCard(change.doc.id, change.doc.data());
-            }
-            if (change.type === "modified") {
-                updateUnitCard(change.doc.id, change.doc.data());
-            }
-            if (change.type === "removed") {
-                removeUnitCard(change.doc.id);
-            }
-        });
+    // CACHE'DEN OKU
+    const units = localCache.units[courseId] || {};
+    Object.values(units).forEach(unit => {
+        renderUnitCard(unit.id, unit);
     });
 };
 
@@ -1383,13 +1454,18 @@ addUnitBtn.addEventListener('click', async () => {
 
 // --- App Initialization ---
 const initializeApp = async () => {
-    // courses isim map'ini yükle ki UI insan okunur isim göstersin
+    console.log("🚀 Uygulama başlatılıyor...");
+    
+    // ÖNEMLİ: İLK ÖNCE TÜM VERİYİ ÇEK!
+    await loadAllDataOnce();
+    
     await loadCourseNameMap();
     displayCourses();
     showCoursesView();
     await displayStreak();
+    
+    console.log("✅ Uygulama hazır!");
 };
-
 
 
 // --- Initial Load ---
