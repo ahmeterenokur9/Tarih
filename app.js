@@ -195,7 +195,7 @@ const loadAllDataOnce = async () => {
 };
 
 
-const displayStreak = () => {
+const displayStreak = async () => {
     try {
         // CACHE'DEN OKU
         const data = localCache.userStats;
@@ -217,10 +217,36 @@ const displayStreak = () => {
             lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
             questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
 
-            if (questionsTodayDate && isSameDay(questionsTodayDate, todayDateOnly)) {
+            // YENİ GÜN KONTROLÜ - BURADA SIFIRLAMA YAPILIYOR!
+            if (questionsTodayDate && !isSameDay(questionsTodayDate, todayDateOnly)) {
+                // Yeni gün başladı! Sayaçları sıfırla
+                questionsToday = 0;
+                dailyCourseStats = {};
+                
+                // Firebase'e yaz
+                const statsRef = doc(db, 'userStats', 'main');
+                const newStats = {
+                    questionsToday: 0,
+                    questionsTodayDate: Timestamp.fromDate(todayDateOnly),
+                    streak,
+                    lastStreakDate: lastStreakDate ? Timestamp.fromDate(lastStreakDate) : null,
+                    dailyCourseStats: {}
+                };
+                await setDoc(statsRef, newStats, { merge: true });
+                
+                // Cache'i güncelle
+                localCache.userStats = {
+                    ...localCache.userStats,
+                    questionsToday: 0,
+                    questionsTodayDate: todayDateOnly,
+                    dailyCourseStats: {}
+                };
+            } else if (questionsTodayDate && isSameDay(questionsTodayDate, todayDateOnly)) {
+                // Bugünün verileri
                 questionsToday = data.questionsToday || 0;
                 dailyCourseStats = data.dailyCourseStats || {};
             } else {
+                // İlk kez açılıyor, veri yok
                 questionsToday = 0;
                 dailyCourseStats = {};
             }
@@ -1451,11 +1477,11 @@ const initializeApp = async () => {
     // İLK ÖNCE TÜM VERİYİ ÇEK
     await loadAllDataOnce();
     
-    // Cache yüklendikten sonra bunlar cache'den çalışır, Firebase'e gitmez
+    // Cache yüklendikten sonra bunlar cache'den çalışır
     loadCourseNameMap();
     displayCourses();
     showCoursesView();
-    displayStreak();
+    await displayStreak(); // Yeni gün sıfırlama burada yapılıyor
     
     console.log("✅ Uygulama hazır!");
 };
