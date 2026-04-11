@@ -114,7 +114,7 @@ const resetAddNoteForm = () => {
 };
 
 // --- Streak Management ---
-const DAILY_GOAL = 100;
+const DAILY_GOAL = 200;
 
 const COURSE_DAILY_MINIMUMS = { 
     "28osYiGGSkK2uONL2k1a": 20,
