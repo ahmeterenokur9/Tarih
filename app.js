@@ -1243,6 +1243,7 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
 const renderCategoryQuizSection = (notesArray) => {
     const section = document.getElementById('category-quiz-section');
     const list = document.getElementById('category-quiz-list');
+    const countLabel = document.getElementById('category-quiz-count');
     if (!section || !list) return;
 
     // Kategorilere göre notları grupla
@@ -1260,7 +1261,21 @@ const renderCategoryQuizSection = (notesArray) => {
     }
 
     section.style.display = 'block';
+    if (countLabel) countLabel.textContent = `${categories.length} kategori`;
     list.innerHTML = '';
+
+    // Toggle davranışı — her render'da yeniden bağla
+    const toggle = document.getElementById('category-quiz-toggle');
+    const body = document.getElementById('category-quiz-body');
+    const arrow = document.getElementById('category-quiz-arrow');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true); // eski listener'ları temizle
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('category-quiz-arrow').classList.toggle('open', isOpen);
+        });
+    }
 
     categories.sort().forEach(cat => {
         const notes = categoryMap[cat];
@@ -1270,27 +1285,35 @@ const renderCategoryQuizSection = (notesArray) => {
 
         const row = document.createElement('div');
         row.className = 'category-quiz-row';
+
+        // Seçenek sayılarını nota göre filtrele (mevcut nota kadar göster)
+        const countOptions = [
+            { label: 'Tümünü Test Et', value: 'all' },
+            { label: '10 Soru', value: '10' },
+            { label: '20 Soru', value: '20' },
+        ].filter(o => o.value === 'all' || parseInt(o.value) <= total || total > 0);
+
+        const buttonsHtml = countOptions.map(o =>
+            `<button class="batch-btn cat-quiz-btn" data-count="${o.value}">${o.label}</button>`
+        ).join('');
+
         row.innerHTML = `
             <div class="category-quiz-info">
                 <span class="category-quiz-name">${cat}</span>
                 <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
             </div>
             <div class="category-quiz-actions">
-                <button class="batch-btn cat-quiz-btn" data-category="${cat}" data-count="all">Tümünü Test Et</button>
-                <button class="batch-btn cat-quiz-btn" data-category="${cat}" data-count="10">10 Soru</button>
+                ${buttonsHtml}
             </div>
         `;
 
-        // Butonlara event listener ekle
         row.querySelectorAll('.cat-quiz-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const count = btn.dataset.count;
-                let selected = [...notes];
-                selected.sort(() => 0.5 - Math.random());
+                let selected = [...notes].sort(() => 0.5 - Math.random());
                 if (count !== 'all') {
-                    selected = selected.slice(0, parseInt(count));
+                    selected = selected.slice(0, parseInt(count)); // not sayısı azsa hepsini alır
                 }
-                // Her nota courseId ve unitId ekle (quiz için gerekli)
                 const quizNotes = selected.map(n => ({
                     ...n,
                     unitId: n.unitId || selectedUnitId,
