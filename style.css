@@ -943,3 +943,109 @@ textarea:focus {
 .course-breakdown .course-item .name { flex:1 }
 .course-breakdown .course-item .status { white-space:nowrap; }
 
+
+
+/* ===== KATEGORİ QUIZ BÖLÜMÜ ===== */
+#category-quiz-section {
+    margin: 16px 0 8px 0;
+    background: var(--card-bg, #fff);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 12px;
+    padding: 16px 20px;
+}
+
+.category-quiz-header {
+    margin-bottom: 14px;
+}
+
+.category-quiz-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+    color: var(--text-primary, #1a202c);
+}
+
+.category-quiz-header p {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #718096);
+}
+
+.category-quiz-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.category-quiz-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--bg-secondary, #f7fafc);
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 8px;
+    padding: 10px 14px;
+    flex-wrap: wrap;
+}
+
+.category-quiz-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.category-quiz-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary, #1a202c);
+    text-transform: capitalize;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.category-quiz-meta {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #718096);
+}
+
+.category-quiz-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+/* Karanlık mod uyumu */
+body.dark-mode #category-quiz-section {
+    background: var(--card-bg-dark, #2d3748);
+    border-color: var(--border-dark, #4a5568);
+}
+
+body.dark-mode .category-quiz-row {
+    background: var(--bg-dark, #1a202c);
+    border-color: var(--border-dark, #4a5568);
+}
+
+body.dark-mode .category-quiz-name {
+    color: #e2e8f0;
+}
+
+body.dark-mode .category-quiz-header h3 {
+    color: #e2e8f0;
+}
+
+@media (max-width: 600px) {
+    .category-quiz-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .category-quiz-actions {
+        width: 100%;
+    }
+    .category-quiz-actions .batch-btn {
+        flex: 1;
+    }
+}
