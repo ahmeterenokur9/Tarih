@@ -1,1587 +1,347 @@
-import { db } from './firebase-config.js';
-import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, writeBatch, deleteDoc, getDoc, setDoc, Timestamp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
-// HATA DÜZELTMESİ: Google'ın resmi Web SDK'sı import edildi.
-import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
+<!DOCTYPE html>
 
-// --- Gemini AI Config ---
-const GEMINI_API_KEY = "AIzaSyDsPESlU0vnH3I_HQf8bVk3u-dHgXFvhRw";
-// HATA DÜZELTMESİ: Eski API URL'si kaldırıldı, yerine SDK istemcisi oluşturuldu.
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+<html lang="tr">
 
-const headerStreakDisplay = document.getElementById('header-streak-display');
-// --- DOM Elements ---
-// Course elements
-const courseBreakdownDiv = document.getElementById('course-breakdown');
+<head>
 
-const coursesContainer = document.getElementById('courses-container');
-const courseNameInput = document.getElementById('course-name-input');
-const addCourseBtn = document.getElementById('add-course-btn');
-const coursesListDiv = document.getElementById('courses-list');
-const selectedCourseTitle = document.getElementById('selected-course-title');
-const backToCoursesBtn = document.getElementById('back-to-courses-btn');
+    <meta charset="UTF-8">
 
-// Unit elements
-const unitNameInput = document.getElementById('unit-name-input');
-const addUnitBtn = document.getElementById('add-unit-btn');
-const unitsListDiv = document.getElementById('units-list');
-const unitsContainer = document.getElementById('units-container');
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-// Note elements
-const notesContainer = document.getElementById('notes-container');
-const unmemorizedNotesListDiv = document.getElementById('unmemorized-notes-list');
-const memorizedNotesListDiv = document.getElementById('memorized-notes-list');
-const selectedUnitTitle = document.getElementById('selected-unit-title');
-const notesStatsDisplay = document.getElementById('notes-stats-display');
-const addNoteContainer = document.getElementById('add-note-container');
-const showAddNoteFormBtn = document.getElementById('show-add-note-form-btn');
-const cancelAddNoteBtn = document.getElementById('cancel-add-note-btn');
-const noteTextInput = document.getElementById('note-text-input');
-const selectedKeywordDisplay = document.getElementById('selected-keyword-display');
-const noteCategoryInput = document.getElementById('note-category-input');
-const categoriesDatalist = document.getElementById('categories-datalist');
-const addNoteBtn = document.getElementById('add-note-btn');
-const backToUnitsBtn = document.getElementById('back-to-units-btn');
-// Search inputs
-const searchUnmemorizedInput = document.getElementById('search-unmemorized');
-const searchMemorizedInput = document.getElementById('search-memorized');
+    <title>Bilgi Kartı Uygulaması</title>
 
-// Quiz elements
-const quizContainer = document.getElementById('quiz-container');
-const quizQuestion = document.getElementById('quiz-question');
-const quizOptions = document.getElementById('quiz-options');
-const quizFeedback = document.getElementById('quiz-feedback');
-// Theme switcher
-const themeToggle = document.getElementById('theme-toggle');
-// Modal elements
-const editModal = document.getElementById('edit-modal');
-const modalTitle = document.getElementById('modal-title');
-const modalTextarea = document.getElementById('modal-textarea');
-const modalSaveBtn = document.getElementById('modal-save-btn');
-const closeBtn = document.querySelector('.close-btn');
-// Batch review controls are now within notesContainer
-const notesView = document.getElementById('notes-view'); 
-// Global review button
-const randomReviewBtn = document.getElementById('random-review-btn');
-// Streak display
-const streakContainer = document.getElementById('streak-container');
-const streakCountDisplay = document.querySelector('#streak-container .streak-count');
-const streakProgressText = document.querySelector('#streak-container .progress-text');
+    <link rel="preconnect" href="https://fonts.googleapis.com">
 
-// AI Chat Modal elements
-const aiChatModal = document.getElementById('ai-chat-modal');
-const aiChatHistory = document.getElementById('ai-chat-history');
-const aiChatInput = document.getElementById('ai-chat-input');
-const aiSendBtn = document.getElementById('ai-send-btn');
-const aiChatCloseBtn = aiChatModal.querySelector('.close-btn');
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
 
 
-// --- State Variables ---
-let selectedCourseId = null;
-let selectedCourseName = null;
-let selectedUnitId = null;
-let selectedUnitName = null;
-let selectedKeyword = ''; // To store the highlighted keyword
-let unsubscribeNotes = null; // To stop listening to previous unit's notes
-let currentEdit = { type: null, id: null, originalData: null }; // To manage what we are editing
-let currentAiChatNote = null; // To store context for AI chat
-let quizQueue = [];
 
-// --- LOCAL CACHE (Yerel Önbellek) ---
-let localCache = {
-    courses: {},      // courseId: { name, data }
-    units: {},        // courseId: { unitId: { name, data } }
-    notes: {},        // courseId: { unitId: { noteId: note } }
-    userStats: null,  // Seri bilgisi
-    lastSync: null    // Son güncelleme zamanı
-};
-let cacheLoaded = false; // Cache yüklendi mi?
+    <header class="app-header">
 
-let currentQuizIndex = 0;
+        <div class="logo">
+    <h1>Bilgi Kartları</h1>
+    <div id="header-streak-display" class="header-streak"></div>
+</div>
 
-// --- Helper Functions ---
-const isSameDay = (date1, date2) => {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-};
+        <div class="theme-switcher">
 
-const resetAddNoteForm = () => {
-    noteTextInput.value = '';
-    noteCategoryInput.value = '';
-    selectedKeyword = '';
-    selectedKeywordDisplay.textContent = 'Henüz seçilmedi. (Metinden seçin)';
-    selectedKeywordDisplay.style.fontStyle = 'italic';
-};
+            <span>Karanlık Mod</span>
 
-// --- Streak Management ---
-const DAILY_GOAL = 100;
+            <label class="switch">
 
-const COURSE_DAILY_MINIMUMS = { 
-    "28osYiGGSkK2uONL2k1a": 20,
-    "Ny9BvgeK5iraMYAvV9RR": 50,
-    "ME0GYyrFQr1Oysycx4vS": 80
-    
-};
+                <input type="checkbox" id="theme-toggle">
 
-// courseId -> course name map (uygulama içinde kullanılacak)
-let courseNameMap = {};
+                <span class="slider round"></span>
 
-// Firestore'dan courses koleksiyonunu okuyup id->isim map'i oluşturur.
-// Çağrıldığında courseNameMap'i doldurur.
-const loadCourseNameMap = () => {
-    // CACHE'DEN OKU - Firebase'e gitme
-    for (const id in localCache.courses) {
-        courseNameMap[id] = localCache.courses[id].name || id;
-    }
-};
+            </label>
 
-// TEK SEFERLIK BÜTÜN VERİYİ ÇEK
-const loadAllDataOnce = async () => {
-    if (cacheLoaded) {
-        console.log("✅ Cache zaten yüklü, Firebase'e gitmiyoruz!");
-        return; // Zaten yüklendi, tekrar çekme!
-    }
-    
-    console.log("📥 İlk yükleme başlıyor... Tüm veriler çekiliyor...");
-    
-    try {
-        // 1. COURSES (Dersler)
-        const coursesSnap = await getDocs(collection(db, 'courses'));
-        coursesSnap.forEach(doc => {
-            localCache.courses[doc.id] = { id: doc.id, ...doc.data() };
-            localCache.units[doc.id] = {};
-            localCache.notes[doc.id] = {};
-        });
-        
-        // 2. UNITS (Üniteler) - Her ders için
-        for (const courseId in localCache.courses) {
-            const unitsSnap = await getDocs(collection(db, `courses/${courseId}/units`));
-            unitsSnap.forEach(doc => {
-                localCache.units[courseId][doc.id] = { id: doc.id, ...doc.data() };
-                localCache.notes[courseId][doc.id] = {};
-            });
-        }
-        
-        // 3. NOTES (Notlar) - Her ünite için
-        for (const courseId in localCache.units) {
-            for (const unitId in localCache.units[courseId]) {
-                const notesSnap = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
-                notesSnap.forEach(doc => {
-                    localCache.notes[courseId][unitId][doc.id] = { id: doc.id, ...doc.data() };
-                });
-            }
-        }
-        
-        // 4. USER STATS (Seri)
-        const statsSnap = await getDoc(doc(db, 'userStats', 'main'));
-        if (statsSnap.exists()) {
-            localCache.userStats = statsSnap.data();
-        }
-        
-        localCache.lastSync = new Date();
-        cacheLoaded = true;
-        console.log("✅ TÜM VERİLER YÜKLENDİ! Artık Firebase'e gitmeyeceğiz!");
-        console.log("📊 Yüklenen:", {
-            dersler: Object.keys(localCache.courses).length,
-            toplam_üniteler: Object.values(localCache.units).reduce((sum, units) => sum + Object.keys(units).length, 0),
-            toplam_notlar: Object.values(localCache.notes).reduce((sum, course) => 
-                sum + Object.values(course).reduce((s2, unit) => s2 + Object.keys(unit).length, 0), 0)
-        });
-        
-    } catch (error) {
-        console.error("❌ Veri yükleme hatası:", error);
-        alert("Veriler yüklenirken hata oluştu. Sayfayı yenileyin.");
-    }
-};
+        </div>
+
+    </header>
 
 
-const displayStreak = async () => {
-    try {
-        // CACHE'DEN OKU
-        const data = localCache.userStats;
 
-        const today = new Date();
-        const yesterday = new Date();
-        yesterday.setDate(today.getDate() - 1);
-        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    <main id="app">
 
-        // Varsayılanlar
-        let streak = 0;
-        let questionsToday = 0;
-        let lastStreakDate = null;
-        let questionsTodayDate = null;
-        let dailyCourseStats = {};
+        <div id="courses-container">
 
-        if (data) {
-            streak = data.streak || 0;
-            lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
-            questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
+            <h2>Dersler</h2>
 
-            // YENİ GÜN KONTROLÜ - BURADA SIFIRLAMA YAPILIYOR!
-            if (questionsTodayDate && !isSameDay(questionsTodayDate, todayDateOnly)) {
-                // Yeni gün başladı! Sayaçları sıfırla
-                questionsToday = 0;
-                dailyCourseStats = {};
-                
-                // Firebase'e yaz
-                const statsRef = doc(db, 'userStats', 'main');
-                const newStats = {
-                    questionsToday: 0,
-                    questionsTodayDate: Timestamp.fromDate(todayDateOnly),
-                    streak,
-                    lastStreakDate: lastStreakDate ? Timestamp.fromDate(lastStreakDate) : null,
-                    dailyCourseStats: {}
-                };
-                await setDoc(statsRef, newStats, { merge: true });
-                
-                // Cache'i güncelle
-                localCache.userStats = {
-                    ...localCache.userStats,
-                    questionsToday: 0,
-                    questionsTodayDate: todayDateOnly,
-                    dailyCourseStats: {}
-                };
-            } else if (questionsTodayDate && isSameDay(questionsTodayDate, todayDateOnly)) {
-                // Bugünün verileri
-                questionsToday = data.questionsToday || 0;
-                dailyCourseStats = data.dailyCourseStats || {};
-            } else {
-                // İlk kez açılıyor, veri yok
-                questionsToday = 0;
-                dailyCourseStats = {};
-            }
-        }
+            <div class="controls">
 
-        // Update UI numeric parts
-        streakCountDisplay.textContent = `${streak} Gün`;
-        streakProgressText.textContent = `Bugünkü Hedef: ${questionsToday} / ${DAILY_GOAL}`;
+                <input type="text" id="course-name-input" placeholder="Yeni ders adı...">
 
-        // Header fire
-        if (streak > 0) {
-            headerStreakDisplay.textContent = `🔥 ${streak}`;
-            headerStreakDisplay.style.display = 'block';
-        } else {
-            headerStreakDisplay.style.display = 'none';
-        }
+                <button id="add-course-btn" class="primary-btn">Ders Ekle</button>
 
-        // Update card style based on today's goal completion, not the streak itself
-        // Ders minimumlarını kontrol et
-let courseConditionsMet = true;
+            </div>
 
-for (const requiredCourseId in COURSE_DAILY_MINIMUMS) {
-    const required = COURSE_DAILY_MINIMUMS[requiredCourseId];
-    const solved = dailyCourseStats[requiredCourseId] || 0;
-    if (solved < required) {
-        courseConditionsMet = false;
-        break;
-    }
-}
+            <div id="courses-list"></div>
 
-// Kart stilini gerçek streak durumuna göre ayarla
-if (questionsToday >= DAILY_GOAL && courseConditionsMet) {
-    streakContainer.classList.remove('inactive');
-} else {
-    streakContainer.classList.add('inactive');
-}
+        </div>
 
 
-        // --- Yeni: Ders Bazlı Gösterim ---
-        if (courseBreakdownDiv) {
-            let breakdownHTML = '<h4>Ders Bazlı</h4>';
-            // COURSE_DAILY_MINIMUMS anahtarları courseId şeklinde tanımlı (senin kodunda öyle)
-            for (const courseId in COURSE_DAILY_MINIMUMS) {
-                const required = COURSE_DAILY_MINIMUMS[courseId];
-                const solved = dailyCourseStats[courseId] || 0;
-                const done = solved >= required;
-                const courseName = courseNameMap[courseId] || courseId; // eğer map boşsa ID gösterilir
 
-                breakdownHTML += `
-                    <div class="course-item">
-                        <div class="name">${courseName}</div>
-                        <div class="status">${solved} / ${required} ${done ? '✅' : ''}</div>
+        <div id="units-container" style="display: none;">
+
+             <div class="units-header">
+
+                <button id="back-to-courses-btn" class="secondary-btn">&larr; Derslere Geri Dön</button>
+
+                <div class="header-content">
+
+                    <h2 id="selected-course-title"></h2>
+
+                </div>
+
+            </div>
+
+            <div class="controls">
+
+                <input type="text" id="unit-name-input" placeholder="Yeni ünite adı...">
+
+                <button id="add-unit-btn" class="primary-btn">Ünite Ekle</button>
+
+            </div>
+
+
+
+            <div class="top-controls-container">
+
+                <div class="global-review-controls">
+
+    <h3>Derse Özel Rastgele Tekrar</h3>
+
+    <p>Bu dersteki tüm ünitelerden rastgele bir test başlatın.</p>
+
+    <div class="global-quiz-buttons" style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+
+        <button class="secondary-btn global-rand-btn" data-count="20">20 Soru</button>
+
+        <button class="secondary-btn global-rand-btn" data-count="30">30 Soru</button>
+
+        <button class="secondary-btn global-rand-btn" data-count="50">50 Soru</button>
+
+        <button class="secondary-btn global-rand-btn" data-count="100">100 Soru</button>
+
+    </div>
+
+</div>
+
+                <div id="streak-container" class="streak-card">
+
+                    <div class="streak-icon">🔥</div>
+
+                    <div class="streak-info">
+
+                        <h3 class="streak-count">0 Gün</h3>
+
+                        <p>Seri</p>
+
                     </div>
-                `;
-            }
-            courseBreakdownDiv.innerHTML = breakdownHTML;
-        }
 
-    } catch (error) {
-        console.error("Error displaying streak: ", error);
-        streakCountDisplay.textContent = 'Hata';
-    }
-};
+                    <div class="streak-progress">
 
-const updateStreak = async (quizQueue) => {
-    try {
-        const statsRef = doc(db, 'userStats', 'main');
+                        <p class="progress-text">Bugünkü Hedef: 0 / 100</p>
 
-        const today = new Date();
-        const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        let streak = 0;
-        let questionsToday = 0;
-        let lastStreakDate = null;
-        let questionsTodayDate = null;
-        let dailyCourseStats = {};
+                    </div>
 
-        // CACHE'DEN OKU
-        const data = localCache.userStats;
-        if (data) {
-            streak = data.streak || 0;
-            lastStreakDate = data.lastStreakDate?.toDate ? data.lastStreakDate.toDate() : (data.lastStreakDate || null);
-            questionsToday = data.questionsToday || 0;
-            questionsTodayDate = data.questionsTodayDate?.toDate ? data.questionsTodayDate.toDate() : (data.questionsTodayDate || null);
-            dailyCourseStats = data.dailyCourseStats || {};
-        }
+                    <div id="course-breakdown" class="course-breakdown"></div>
 
-        // Yeni gün başladıysa bugünkü sayaçları sıfırla
-        if (!questionsTodayDate || !isSameDay(questionsTodayDate, todayDateOnly)) {
-            questionsToday = 0;
-            dailyCourseStats = {};
-        }
-
-        // 1) Bu testten gelen soruları ekle
-        const addedQuestions = Array.isArray(quizQueue) ? quizQueue.length : 0;
-        questionsToday += addedQuestions;
-
-        // 2) Her not için courseId bazlı sayacı artır
-        if (Array.isArray(quizQueue)) {
-            quizQueue.forEach(note => {
-                const cid = note.courseId || null;
-                if (!cid) return;
-                if (!dailyCourseStats[cid]) dailyCourseStats[cid] = 0;
-                dailyCourseStats[cid] += 1;
-            });
-        }
-
-        // 3) Ders bazlı zorunlu minimumları kontrol et
-        let courseConditionsMet = true;
-        for (const requiredCourseId in COURSE_DAILY_MINIMUMS) {
-            const required = COURSE_DAILY_MINIMUMS[requiredCourseId];
-            const solved = dailyCourseStats[requiredCourseId] || 0;
-            if (solved < required) {
-                courseConditionsMet = false;
-                break;
-            }
-        }
-
-        // 4) Streak karar: SADECE tüm hedefler dolduğunda artır, dolmamışsa DOKUNMA
-        if (questionsToday >= DAILY_GOAL && courseConditionsMet) {
-            // Bugün daha önce streak artırıldıysa tekrar artırma
-            if (!lastStreakDate || !isSameDay(lastStreakDate, todayDateOnly)) {
-                const yesterday = new Date(todayDateOnly);
-                yesterday.setDate(todayDateOnly.getDate() - 1);
-
-                if (lastStreakDate && isSameDay(lastStreakDate, yesterday)) {
-                    // Dün de tamamlanmış -> artır
-                    streak = (streak || 0) + 1;
-                } else {
-                    // Dün tamamlanmamış ya da ilk kez -> 1'den başla
-                    streak = 1;
-                }
-                lastStreakDate = todayDateOnly;
-            }
-            // else: bugün zaten artırıldı, hiçbey şey yapma
-        }
-        // else: hedefler henüz dolmadı -> streak'e DOKUNMA (sıfırlama yok!)
-
-        // 5) Firebase'e kaydet
-        const newStats = {
-            questionsToday,
-            questionsTodayDate: Timestamp.fromDate(todayDateOnly),
-            streak,
-            lastStreakDate: lastStreakDate ? Timestamp.fromDate(lastStreakDate) : null,
-            dailyCourseStats
-        };
-        await setDoc(statsRef, newStats, { merge: true });
-
-        // 6) CACHE'İ GÜNCELLE
-        localCache.userStats = {
-            ...localCache.userStats,
-            questionsToday,
-            questionsTodayDate: todayDateOnly,
-            streak,
-            lastStreakDate: lastStreakDate,
-            dailyCourseStats
-        };
-
-    } catch (error) {
-        console.error("Error in updateStreak:", error);
-    }
-};
-
-
-
-// --- SVG Icons ---
-const editIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>`;
-const deleteIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`;
-const aiIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-1.2 0-2.4.6-3 1.7A3.5 3.5 0 0 0 3.5 8c0 2.2 1.8 4 4 4h9c2.2 0 4-1.8 4-4s-1.8-4-4-4c-.5 0-1 .1-1.5.3A3.5 3.5 0 0 0 12 3z"></path><path d="M12 12v9"></path><path d="m9 21 6-6"></path></svg>`;
-
-
-// --- Theme Management ---
-const setTheme = (theme) => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
-    themeToggle.checked = theme === 'dark';
-};
-
-themeToggle.addEventListener('change', () => {
-    const newTheme = themeToggle.checked ? 'dark' : 'light';
-    setTheme(newTheme);
-});
-
-// Check for saved theme preference
-const savedTheme = localStorage.getItem('theme') || 'light';
-setTheme(savedTheme);
-
-
-// --- Modal Management ---
-const openEditModal = (type, id, data) => {
-    currentEdit = { type, id, originalData: data };
-    if (type === 'unit') {
-        modalTitle.textContent = 'Ünite Adını Düzenle';
-        modalTextarea.value = data.name;
-    } else {
-        modalTitle.textContent = 'Notu Düzenle';
-        modalTextarea.value = data.noteText;
-    }
-    editModal.style.display = 'block';
-};
-
-const closeEditModal = () => {
-    editModal.style.display = 'none';
-    currentEdit = { type: null, id: null, originalData: null };
-};
-
-closeBtn.addEventListener('click', closeEditModal);
-window.addEventListener('click', (event) => {
-    if (event.target == editModal) {
-        closeEditModal();
-    }
-});
-
-// --- AI Chat Modal Management ---
-const openAiChatModal = (noteText) => {
-    currentAiChatNote = noteText;
-    aiChatHistory.innerHTML = `<div class="system-message">Bu not hakkında sohbet et: "<strong>${noteText}</strong>"</div>`;
-    aiChatInput.value = '';
-    aiChatModal.style.display = 'block';
-    aiChatInput.focus();
-};
-
-const closeAiChatModal = () => {
-    aiChatModal.style.display = 'none';
-    currentAiChatNote = null;
-};
-
-const appendToChatHistory = (html) => {
-    aiChatHistory.innerHTML += html;
-    aiChatHistory.scrollTop = aiChatHistory.scrollHeight; // Auto-scroll to bottom
-};
-
-const handleAiChatSend = async () => {
-    const userInput = aiChatInput.value.trim();
-    if (!userInput || !currentAiChatNote) return;
-
-    aiChatInput.value = ''; // Clear input
-    appendToChatHistory(`<div class="chat-message user-message">${userInput}</div>`);
-    
-    const loadingId = `loading-${Date.now()}`;
-    appendToChatHistory(`<div class="chat-message ai-message ai-loading" id="${loadingId}">Y. Zeka düşünüyor...</div>`);
-    
-    try {
-        // HATA DÜZELTMESİ: SDK kullanılarak model ve prompt oluşturuldu.
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". kullanıcı kendisi bu notu ekledi ve şimdi sana bir mesajı var mesajını cevapla amacın kullanacının öğrenme yolculuğunda ona yardımcı olmak ve bilgileri ve tarihi akışı öğrenmesini kolaylaştırmak ama uzun ve detaylı olarak değil kısa ve öz olarak cevap vereceksin: "${userInput}"`;
-
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const aiResponse = response.text();
-        
-        const loadingElement = document.getElementById(loadingId);
-        loadingElement.classList.remove('ai-loading');
-        loadingElement.textContent = aiResponse;
-
-    } catch (error) {
-        console.error("Gemini API Error:", error);
-        const loadingElement = document.getElementById(loadingId);
-        loadingElement.classList.remove('ai-loading');
-        loadingElement.textContent = "Üzgünüm, bir hata oluştu. API anahtarını veya model adını kontrol edin.";
-    }
-};
-
-
-aiChatCloseBtn.addEventListener('click', closeAiChatModal);
-aiSendBtn.addEventListener('click', handleAiChatSend);
-aiChatInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleAiChatSend();
-    }
-});
-window.addEventListener('click', (event) => {
-    if (event.target == aiChatModal) {
-        closeAiChatModal();
-    }
-});
-
-
-
-// Global Random Review Event Listener
-// YENİ DİNAMİK KODU YAPIŞTIR:
-document.querySelectorAll('.global-rand-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        if (!selectedCourseId) return;
-        
-        const countToSelect = parseInt(btn.dataset.count); // Butondaki 20, 30 vs. değerini alır
-        const unitsRef = collection(db, `courses/${selectedCourseId}/units`);
-        
-        try {
-            const unitsSnapshot = await getDocs(unitsRef);
-            let allNotes = [];
-
-            // Tüm üniteleri gez ve içindeki notları topla
-            for (const unitDoc of unitsSnapshot.docs) {
-                const notesSnapshot = await getDocs(collection(db, `courses/${selectedCourseId}/units/${unitDoc.id}/notes`));
-                notesSnapshot.forEach(noteDoc => {
-                    allNotes.push({ 
-                        id: noteDoc.id, 
-                        unitId: unitDoc.id, 
-                        courseId: selectedCourseId, 
-                        ...noteDoc.data() 
-                    });
-                });
-            }
-
-            if (allNotes.length === 0) {
-                alert('Bu derste henüz hiç not bulunamadı!');
-                return;
-            }
-
-            // Notları karıştır ve butondaki sayı kadarını seç
-            allNotes.sort(() => 0.5 - Math.random());
-            const selectedNotes = allNotes.slice(0, countToSelect);
-            
-            startQuizSession(selectedNotes);
-        } catch (error) {
-            console.error("Genel test hatası: ", error);
-            alert("Test başlatılırken bir hata oluştu.");
-        }
-    });
-});
-
-
-
-// --- UI Interactions ---
-showAddNoteFormBtn.addEventListener('click', () => {
-    const isVisible = addNoteContainer.style.display === 'block';
-    addNoteContainer.style.display = isVisible ? 'none' : 'block';
-    showAddNoteFormBtn.textContent = isVisible ? '+ Yeni Not Ekle' : 'Formu Kapat';
-});
-
-cancelAddNoteBtn.addEventListener('click', () => {
-    addNoteContainer.style.display = 'none';
-    showAddNoteFormBtn.textContent = '+ Yeni Not Ekle';
-    resetAddNoteForm();
-});
-
-
-// --- Search Functionality ---
-const filterNotes = (searchTerm, noteListElement) => {
-    const notes = noteListElement.querySelectorAll('.note-item');
-    const term = searchTerm.toLowerCase();
-
-    notes.forEach(note => {
-        const noteText = note.querySelector('.note-content p')?.textContent.toLowerCase() || '';
-        const noteCategory = note.querySelector('.note-content .category')?.textContent.toLowerCase() || '';
-        const isVisible = noteText.includes(term) || noteCategory.includes(term);
-        note.style.display = isVisible ? '' : 'none';
-    });
-};
-
-searchUnmemorizedInput.addEventListener('input', (e) => {
-    filterNotes(e.target.value, unmemorizedNotesListDiv);
-});
-
-searchMemorizedInput.addEventListener('input', (e) => {
-    filterNotes(e.target.value, memorizedNotesListDiv);
-});
-
-
-// Batch Review Event Listener
-// Event Delegation for Batch Reviews inside Notes Container
-// --- YENİ RASTGELE TEST MANTIĞI ---
-notesContainer.addEventListener('click', async (e) => {
-    if (e.target.classList.contains('batch-btn')) {
-        const button = e.target;
-        const type = button.dataset.type; // HTML'deki data-type: "10" veya "all"
-
-        // Statü fark etmeksizin ünitedeki tüm notları referans alıyoruz
-        const notesRef = collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`);
-        
-        try {
-            const snapshot = await getDocs(notesRef);
-            let allUnitNotes = [];
-            
-            snapshot.forEach(doc => {
-                allUnitNotes.push({ 
-                    id: doc.id, 
-                    unitId: selectedUnitId, 
-                    courseId: selectedCourseId, 
-                    ...doc.data() 
-                });
-            });
-
-            if (allUnitNotes.length === 0) {
-                alert('Bu ünitede henüz test edilecek not bulunamadı!');
-                return;
-            }
-
-            // 1. Tüm notları tamamen rastgele karıştır
-            allUnitNotes.sort(() => 0.5 - Math.random());
-
-            // 2. Seçime göre notları ayır
-            let selectedNotes;
-            if (type === 'all') {
-                selectedNotes = allUnitNotes;
-            } else {
-                const limit = parseInt(type, 10); // data-type="10" ise 10 tane al
-                selectedNotes = allUnitNotes.slice(0, limit);
-            }
-            
-            startQuizSession(selectedNotes);
-
-        } catch (error) {
-            console.error("Notlar çekilirken hata oluştu: ", error);
-            alert('Test başlatılamadı, bir hata oluştu.');
-        }
-    }
-});
-
-modalSaveBtn.addEventListener('click', async () => {
-    const newText = modalTextarea.value.trim();
-    if (!newText) {
-        alert('İçerik boş olamaz.');
-        return;
-    }
-
-    const { type, id, originalData } = currentEdit;
-    if (!type || !id) return;
-
-    try {
-        if (type === 'unit') {
-            await updateDoc(doc(db, 'units', id), { name: newText });
-        } else if (type === 'note') {
-            // Check if the original keyword is still in the new text
-            if (!newText.includes(originalData.keyword)) {
-                if (!confirm('Anahtar kelime artık not içinde bulunmuyor. Bu, test işlevini bozabilir. Yine de devam etmek istiyor musunuz?')) {
-                    return;
-                }
-            }
-            await updateDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, id), { noteText: newText });
-        }
-        closeEditModal();
-    } catch (error) {
-        console.error(`Error updating ${type}:`, error);
-        alert('Güncelleme sırasında bir hata oluştu.');
-    }
-});
-
-
-// --- Confidence Level Decay Logic ---
-
-const checkAndUpdateConfidenceLevels = async (courseId, unitId) => {
-    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
-    const q = query(notesRef, where('status', '==', 'Ezberlenmiş'));
-    const snapshot = await getDocs(q);
-
-    if (snapshot.empty) return;
-
-    const batch = writeBatch(db);
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-    snapshot.forEach(document => {
-        const note = document.data();
-        const noteId = document.id;
-        
-        // --- Core Fix: Check if decay was already applied today ---
-        if (note.decayLastAppliedAt && isSameDay(note.decayLastAppliedAt.toDate(), today)) {
-            return; // Skip this note, decay already applied for today.
-        }
-
-        if (!note.lastReviewedAt || typeof note.lastReviewedAt.toDate !== 'function') return;
-        
-        const lastReviewed = note.lastReviewedAt.toDate();
-        const lastReviewedStart = new Date(lastReviewed.getFullYear(), lastReviewed.getMonth(), lastReviewed.getDate());
-
-        const msPerDay = 1000 * 60 * 60 * 24;
-        const daysPassed = Math.round((todayStart - lastReviewedStart) / msPerDay);
-
-        if (daysPassed > 0) {
-            const decayAmount = daysPassed * 3;
-            let newConfidence = Math.max(0, note.confidenceLevel - decayAmount);
-            const docRef = doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId);
-
-            if (newConfidence < 15) {
-                batch.update(docRef, {
-                    status: 'Ezberlenmemiş',
-                    confidenceLevel: 0,
-                    decayLastAppliedAt: today // Stamp it
-                });
-            } else {
-                batch.update(docRef, {
-                    confidenceLevel: newConfidence,
-                    decayLastAppliedAt: today // Stamp it
-                });
-            }
-        }
-    });
-
-    if (!batch.empty) {
-        await batch.commit();
-    }
-};
-
-
-// --- CRUD Operations ---
-
-// Get Stats for a Unit
-const getUnitStats = async (courseId, unitId) => {
-    const notesRef = collection(db, `courses/${courseId}/units/${unitId}/notes`);
-    const snapshot = await getDocs(notesRef);
-    const totalCount = snapshot.size;
-    
-    const memorizedQuery = query(notesRef, where('status', '==', 'Ezberlenmiş'));
-    const memorizedSnapshot = await getDocs(memorizedQuery);
-    const memorizedCount = memorizedSnapshot.size;
-    
-    return {
-        total: totalCount,
-        memorized: memorizedCount,
-        unmemorized: totalCount - memorizedCount
-    };
-};
-
-// Get Stats for a Course
-const getCourseStats = async (courseId) => {
-    const unitsRef = collection(db, `courses/${courseId}/units`);
-    const unitsSnapshot = await getDocs(unitsRef);
-    const unitCount = unitsSnapshot.size;
-    let totalNoteCount = 0;
-
-    for (const unitDoc of unitsSnapshot.docs) {
-        const notesRef = collection(db, `courses/${courseId}/units/${unitDoc.id}/notes`);
-        const notesSnapshot = await getDocs(notesRef);
-        totalNoteCount += notesSnapshot.size;
-    }
-
-    return {
-        units: unitCount,
-        notes: totalNoteCount,
-    };
-};
-
-
-// Delete Course
-const deleteCourse = async (courseId) => {
-    if (!confirm('Bu dersi ve içindeki tüm üniteleri/notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
-    try {
-        // This is complex. We need to delete all notes in all units, then all units, then the course.
-        const unitsSnapshot = await getDocs(collection(db, `courses/${courseId}/units`));
-        for (const unitDoc of unitsSnapshot.docs) {
-            await deleteUnit(courseId, unitDoc.id, false); // Call deleteUnit without confirmation
-        }
-        await deleteDoc(doc(db, 'courses', courseId));
-    } catch (error) {
-        console.error("Error deleting course: ", error);
-        alert('Ders silinirken bir hata oluştu.');
-    }
-};
-
-
-// Delete Unit
-const deleteUnit = async (courseId, unitId, showConfirmation = true) => {
-    if (showConfirmation && !confirm('Bu üniteyi ve içindeki tüm notları silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) return;
-    try {
-        // First, delete all notes in the subcollection
-        const notesSnapshot = await getDocs(collection(db, `courses/${courseId}/units/${unitId}/notes`));
-        const deleteBatch = writeBatch(db);
-        notesSnapshot.forEach(doc => {
-            deleteBatch.delete(doc.ref);
-        });
-        await deleteBatch.commit();
-        
-        // Then, delete the unit itself
-        await deleteDoc(doc(db, `courses/${courseId}/units`, unitId));
-    } catch (error) {
-        console.error("Error deleting unit: ", error);
-        alert('Ünite silinirken bir hata oluştu.');
-    }
-};
-
-// Delete Note
-const deleteNote = async (noteId) => {
-    if (!confirm('Bu notu silmek istediğinizden emin misiniz?')) return;
-    try {
-        // Firebase'den sil
-        await deleteDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, noteId));
-        
-        // CACHE'DEN SİL
-        if (localCache.notes[selectedCourseId]?.[selectedUnitId]?.[noteId]) {
-            delete localCache.notes[selectedCourseId][selectedUnitId][noteId];
-        }
-
-    } catch (error) {
-        console.error("Error deleting note: ", error);
-        alert('Not silinirken bir hata oluştu.');
-    }
-};
-
-// --- Note Management ---
-
-// Listen for text selection in the textarea
-noteTextInput.addEventListener('mouseup', () => {
-    const highlightedText = window.getSelection().toString().trim();
-    if (highlightedText) {
-        selectedKeyword = highlightedText;
-        selectedKeywordDisplay.textContent = selectedKeyword;
-        selectedKeywordDisplay.style.fontStyle = 'normal';
-    }
-});
-
-const updateNoteStatus = async (courseId, unitId, noteId, newStatus, newConfidence, testStats = null) => {
-    try {
-        const updateData = {
-            status: newStatus,
-            confidenceLevel: newConfidence,
-            lastReviewedAt: new Date()
-        };
-
-        if (testStats) {
-            updateData.testCorrectCount = testStats.correct;
-            updateData.testIncorrectCount = testStats.incorrect;
-        }
-
-        // Firebase'e yaz
-        await updateDoc(doc(db, `courses/${courseId}/units/${unitId}/notes`, noteId), updateData);
-        
-        // CACHE'İ GÜNCELLE
-        if (localCache.notes[courseId]?.[unitId]?.[noteId]) {
-            Object.assign(localCache.notes[courseId][unitId][noteId], updateData);
-        }
-
-    } catch (error) {
-        console.error("Error updating note status: ", error);
-    }
-};
-
-const displayNotes = async (unitId) => {
-    if (unsubscribeNotes) {
-        unsubscribeNotes();
-        unsubscribeNotes = null;
-    }
-    
-    unmemorizedNotesListDiv.innerHTML = '';
-    memorizedNotesListDiv.innerHTML = '';
-    
-    // CACHE'DEN OKU (Firebase'e gitme!)
-    const notesObj = localCache.notes[selectedCourseId]?.[unitId] || {};
-    const notesArray = Object.values(notesObj).map(n => ({
-        ...n,
-        unitId: unitId,
-        courseId: selectedCourseId
-    }));
-    
-    const categories = new Set();
-    let unmemorizedCount = 0;
-    let memorizedCount = 0;
-    const totalCount = notesArray.length;
-
-    if (totalCount === 0) {
-        unmemorizedNotesListDiv.innerHTML = '<p>Bu ünitede henüz not yok.</p>';
-        memorizedNotesListDiv.innerHTML = '';
-        notesStatsDisplay.innerHTML = '';
-        categoriesDatalist.innerHTML = '';
-        return;
-    }
-
-    notesArray.forEach(note => {
-        categories.add(note.category);
-
-        const noteId = note.id;
-        const noteElement = document.createElement('div');
-        noteElement.classList.add('note-item');
-        noteElement.dataset.id = noteId;
-
-        let actionsHtml = '';
-        let statsHtml = '';
-        const displayText = note.noteText.replace(note.keyword, `<b>${note.keyword}</b>`);
-
-        if (note.status === 'Ezberlenmemiş') {
-            actionsHtml = `
-                <button class="test-unmemorized-btn secondary-btn">Test Et</button>
-                <button class="mark-memorized-btn primary-btn">Ezberledim</button>
-            `;
-            const correct = note.testCorrectCount || 0;
-            const incorrect = note.testIncorrectCount || 0;
-            statsHtml = `
-                <div class="note-learning-stats">
-                    <span><b>Doğru:</b> ${correct}</span>
-                    <span><b>Yanlış:</b> ${incorrect}</span>
                 </div>
-            `;
-        } else {
-            actionsHtml = `<button class="start-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel}%</p>`;
-        }
 
-        noteElement.innerHTML = `
-            <div class="note-content">
-                <p>${displayText}</p>
-                <span class="category">${note.category}</span>
-                ${statsHtml}
             </div>
-            <div class="note-info">
-                 <p><b>Durum:</b> ${note.status}</p>
-                 <div class="actions">
-                    ${actionsHtml}
-                </div>
-            </div>
-            <div class="card-actions">
-                <button class="action-btn ai-chat-btn" title="Y. Zeka ile Sohbet Et">${aiIconSVG}</button>
-                <button class="action-btn edit-note-btn" title="Notu Düzenle">${editIconSVG}</button>
-                <button class="action-btn delete-note-btn" title="Notu Sil">${deleteIconSVG}</button>
-            </div>
-        `;
-        
-        if (note.status === 'Ezberlenmemiş') {
-            unmemorizedNotesListDiv.appendChild(noteElement);
-            unmemorizedCount++;
-        } else {
-            memorizedNotesListDiv.appendChild(noteElement);
-            memorizedCount++;
-        }
-
-        noteElement.querySelector('.delete-note-btn').addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await deleteNote(noteId);
-            displayNotes(unitId); // Sayfa yenile (Cache'den)
-        });
-
-        noteElement.querySelector('.edit-note-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            openEditModal('note', noteId, note);
-        });
-        
-        noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            openAiChatModal(note.noteText);
-        });
-
-        const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
-        if (markMemorizedBtn) {
-            markMemorizedBtn.addEventListener('click', async () => {
-                await updateNoteStatus(selectedCourseId, selectedUnitId, noteId, 'Ezberlenmiş', 100, { correct: 0, incorrect: 0 });
-                displayNotes(unitId); // Sayfa yenile (Cache'den)
-            });
-        }
-
-        const testBtn = noteElement.querySelector('.test-unmemorized-btn, .start-quiz-btn');
-        if (testBtn) {
-            testBtn.addEventListener('click', () => {
-                startQuizSession([{ id: noteId, unitId: selectedUnitId, courseId: selectedCourseId, ...note }]);
-            });
-        }
-    });
-    
-    categoriesDatalist.innerHTML = '';
-    categories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = category;
-        categoriesDatalist.appendChild(option);
-    });
-
-    notesStatsDisplay.innerHTML = `
-        <span class="stat-item">Toplam: ${totalCount}</span>
-        <span class="stat-item">Ezberlenmiş: ${memorizedCount}</span>
-        <span class="stat-item">Ezberlenmemiş: ${unmemorizedCount}</span>
-    `;
-    
-    if (memorizedCount === 0) {
-        memorizedNotesListDiv.innerHTML = '<p>Henüz ezberlenmiş not yok.</p>';
-    }
-    if (unmemorizedCount === 0 && totalCount > 0) {
-        unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
-    }
-
-    // KATEGORİ QUIZ BÖLÜMÜNÜ RENDER ET
-    renderCategoryQuizSection(notesArray);
-};
-
-addNoteBtn.addEventListener('click', async () => {
-    const noteText = noteTextInput.value.trim();
-    const category = noteCategoryInput.value.trim();
-
-    if (noteText && category && selectedKeyword && selectedCourseId && selectedUnitId) {
-        if (!noteText.includes(selectedKeyword)) {
-            alert('Lütfen not metninin içinden bir anahtar kelime seçin.');
-            return;
-        }
-
-        try {
-            const newNote = {
-                noteText: noteText,
-                keyword: selectedKeyword,
-                category: category,
-                status: 'Ezberlenmemiş',
-                confidenceLevel: 0,
-                createdAt: new Date(),
-                lastReviewedAt: new Date(),
-                decayLastAppliedAt: new Date(),
-                testCorrectCount: 0,
-                testIncorrectCount: 0
-            };
-            
-            // Firebase'e ekle
-            const docRef = await addDoc(collection(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`), newNote);
-            
-            // CACHE'E EKLE
-            newNote.id = docRef.id;
-            localCache.notes[selectedCourseId][selectedUnitId][docRef.id] = newNote;
-            
-            resetAddNoteForm();
-            addNoteContainer.style.display = 'none';
-            showAddNoteFormBtn.textContent = '+ Yeni Not Ekle';
-            
-            // Sayfayı yenile (Cache'den!)
-            displayNotes(selectedUnitId);
-
-        } catch (error) {
-            console.error("Error adding note: ", error);
-        }
-    } else {
-        alert('Lütfen tüm alanları doldurun ve bir anahtar kelime seçin.');
-    }
-});
 
 
-// --- Unit Management ---
 
-const showNotesView = async (unitId, unitName) => {
-    // First, check and update confidence levels before displaying notes
-    await checkAndUpdateConfidenceLevels(selectedCourseId, unitId);
+            <div id="units-list"></div>
 
-    selectedUnitId = unitId;
-    selectedUnitName = unitName;
-    selectedUnitTitle.textContent = `${unitName}`; // Simpler title
-    unitsContainer.style.display = 'none';
-    quizContainer.style.display = 'none';
-    notesContainer.style.display = 'block';
-
-    // Reset UI states
-    addNoteContainer.style.display = 'none';
-    showAddNoteFormBtn.textContent = '+ Yeni Not Ekle';
-    resetAddNoteForm();
-    searchUnmemorizedInput.value = ''; // Reset search
-    searchMemorizedInput.value = ''; // Reset search
-
-    displayNotes(unitId);
-};
-
-const showUnitsView = (courseId, courseName) => {
-    selectedCourseId = courseId;
-    selectedCourseName = courseName;
-    selectedCourseTitle.textContent = `Ders: ${courseName}`;
-
-    coursesContainer.style.display = 'none';
-    notesContainer.style.display = 'none';
-    quizContainer.style.display = 'none';
-    unitsContainer.style.display = 'block';
-
-    if (unsubscribeNotes) {
-        unsubscribeNotes();
-        unsubscribeNotes = null;
-    }
-    displayUnits(courseId);
-};
-
-const showCoursesView = () => {
-    selectedCourseId = null;
-    selectedCourseName = null;
-    selectedUnitId = null;
-    selectedUnitName = null;
-
-    coursesContainer.style.display = 'block';
-    unitsContainer.style.display = 'none';
-    notesContainer.style.display = 'none';
-    quizContainer.style.display = 'none';
-
-    if (unsubscribeNotes) { // Also applies to unit listeners, which we will handle later
-        unsubscribeNotes();
-        unsubscribeNotes = null;
-    }
-};
-
-
-// --- Quiz Management ---
-
-const displayCurrentQuizQuestion = async () => {
-    if (currentQuizIndex >= quizQueue.length) {
-        // Quiz is over
-        await updateStreak(quizQueue); // Update streak with the number of questions answered
-        await displayStreak(); // Refresh the display
-        
-        quizQuestion.innerHTML = `Test Tamamlandı!`;
-        quizOptions.innerHTML = `<p>${quizQueue.length} sorudan ${quizQueue.filter(n => n.correct).length} tanesini doğru cevapladınız.</p>`;
-        quizFeedback.innerHTML = '';
-        quizFeedback.className = ''; // Bug Fix: Clear color from the last question's feedback
-
-        // Add a button to go back
-        const backButton = document.createElement('button');
-        backButton.textContent = 'Geri Dön';
-        backButton.className = 'primary-btn';
-        backButton.onclick = () => {
-            if (selectedUnitId) { // This means quiz was for a specific unit
-                showNotesView(selectedUnitId, selectedUnitName);
-            } else if (selectedCourseId) { // This means it was a random course quiz
-                showUnitsView(selectedCourseId, selectedCourseName);
-            } else {
-                showCoursesView();
-            }
-        };
-        quizOptions.appendChild(backButton);
-        return;
-    }
-
-    const noteToTest = quizQueue[currentQuizIndex];
-    unitsContainer.style.display = 'none';
-    notesContainer.style.display = 'none';
-    quizContainer.style.display = 'block';
-    quizFeedback.textContent = '';
-    quizFeedback.className = ''; // Bug Fix: Clear previous feedback style
-    quizOptions.innerHTML = '';
-
-    const questionText = noteToTest.noteText.replace(noteToTest.keyword, '_______');
-    quizQuestion.innerHTML = `Soru ${currentQuizIndex + 1} / ${quizQueue.length}<br><br>"${questionText}"`;
-
-    // --- Advanced Distractor Fetching Logic ---
-    const distractors = new Set();
-    const correctKeywordLower = noteToTest.keyword.toLowerCase();
-
-    // 1. Try to get from the same category first
-    const categoryQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`), where('category', '==', noteToTest.category));
-    const categorySnapshot = await getDocs(categoryQuery);
-    categorySnapshot.forEach(doc => {
-        const keyword = doc.data().keyword;
-        if (distractors.size < 3 && keyword.toLowerCase() !== correctKeywordLower) {
-            distractors.add(keyword);
-        }
-    });
-
-    // 2. If not enough, get more from the entire unit
-    if (distractors.size < 3) {
-        const unitQuery = query(collection(db, `courses/${noteToTest.courseId}/units/${noteToTest.unitId}/notes`));
-        const unitSnapshot = await getDocs(unitQuery);
-        
-        const existingOptionsLower = new Set([...distractors].map(d => d.toLowerCase()));
-        existingOptionsLower.add(correctKeywordLower);
-
-        unitSnapshot.forEach(doc => {
-            const keyword = doc.data().keyword;
-            if (distractors.size < 3 && !existingOptionsLower.has(keyword.toLowerCase())) {
-                distractors.add(keyword);
-            }
-        });
-    }
-
-    const options = [noteToTest.keyword, ...distractors].sort(() => 0.5 - Math.random());
-
-    options.forEach(option => {
-        const button = document.createElement('button');
-        button.textContent = option;
-        button.addEventListener('click', () => handleQuizAnswer(option, noteToTest));
-        quizOptions.appendChild(button);
-    });
-};
-
-const handleQuizAnswer = (selectedOption, correctNote) => {
-    const buttons = quizOptions.querySelectorAll('button');
-    buttons.forEach(button => button.disabled = true);
-
-    if (selectedOption.toLowerCase() === correctNote.keyword.toLowerCase()) {
-        quizFeedback.textContent = "Doğru!";
-        quizFeedback.className = 'correct';
-        quizQueue[currentQuizIndex].correct = true;
-        
-        if (correctNote.status === 'Ezberlenmiş') {
-            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmiş', 100);
-        } else {
-            const newCorrectCount = (correctNote.testCorrectCount || 0) + 1;
-            const newIncorrectCount = correctNote.testIncorrectCount || 0;
-            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
-        }
-    } else {
-        quizFeedback.textContent = `Yanlış. Doğru cevap: ${correctNote.keyword}.`;
-        quizFeedback.className = 'incorrect';
-        quizQueue[currentQuizIndex].correct = false;
-
-        if (correctNote.status === 'Ezberlenmiş') {
-            const newConfidence = Math.max(0, correctNote.confidenceLevel - 25);
-            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmiş', newConfidence);
-        } else {
-            const newCorrectCount = correctNote.testCorrectCount || 0;
-            const newIncorrectCount = (correctNote.testIncorrectCount || 0) + 1;
-            updateNoteStatus(correctNote.courseId, correctNote.unitId, correctNote.id, 'Ezberlenmemiş', 0, { correct: newCorrectCount, incorrect: newIncorrectCount });
-        }
-    }
-
-    currentQuizIndex++;
-    setTimeout(displayCurrentQuizQuestion, 1500);
-};
-
-// --- KATEGORİ QUIZ ---
-
-const renderCategoryQuizSection = (notesArray) => {
-    const section = document.getElementById('category-quiz-section');
-    const list = document.getElementById('category-quiz-list');
-    const countLabel = document.getElementById('category-quiz-count');
-    if (!section || !list) return;
-
-    // Kategorilere göre notları grupla
-    const categoryMap = {};
-    notesArray.forEach(note => {
-        const cat = note.category || 'Kategorisiz';
-        if (!categoryMap[cat]) categoryMap[cat] = [];
-        categoryMap[cat].push(note);
-    });
-
-    const categories = Object.keys(categoryMap);
-    if (categories.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-
-    section.style.display = 'block';
-    if (countLabel) countLabel.textContent = `${categories.length} kategori`;
-    list.innerHTML = '';
-
-    // Toggle davranışı — her render'da yeniden bağla
-    const toggle = document.getElementById('category-quiz-toggle');
-    const body = document.getElementById('category-quiz-body');
-    const arrow = document.getElementById('category-quiz-arrow');
-    if (toggle && body && arrow) {
-        const newToggle = toggle.cloneNode(true); // eski listener'ları temizle
-        toggle.parentNode.replaceChild(newToggle, toggle);
-        newToggle.addEventListener('click', () => {
-            const isOpen = body.classList.toggle('open');
-            document.getElementById('category-quiz-arrow').classList.toggle('open', isOpen);
-        });
-    }
-
-    categories.sort().forEach(cat => {
-        const notes = categoryMap[cat];
-        const total = notes.length;
-        const memorized = notes.filter(n => n.status === 'Ezberlenmiş').length;
-        const unmemorized = total - memorized;
-
-        const row = document.createElement('div');
-        row.className = 'category-quiz-row';
-
-        // Seçenek sayılarını nota göre filtrele (mevcut nota kadar göster)
-        const countOptions = [
-            { label: 'Tümünü Test Et', value: 'all' },
-            { label: '10 Soru', value: '10' },
-            { label: '20 Soru', value: '20' },
-        ].filter(o => o.value === 'all' || parseInt(o.value) <= total || total > 0);
-
-        const buttonsHtml = countOptions.map(o =>
-            `<button class="batch-btn cat-quiz-btn" data-count="${o.value}">${o.label}</button>`
-        ).join('');
-
-        row.innerHTML = `
-            <div class="category-quiz-info">
-                <span class="category-quiz-name">${cat}</span>
-                <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
-            </div>
-            <div class="category-quiz-actions">
-                ${buttonsHtml}
-            </div>
-        `;
-
-        row.querySelectorAll('.cat-quiz-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const count = btn.dataset.count;
-                let selected = [...notes].sort(() => 0.5 - Math.random());
-                if (count !== 'all') {
-                    selected = selected.slice(0, parseInt(count)); // not sayısı azsa hepsini alır
-                }
-                const quizNotes = selected.map(n => ({
-                    ...n,
-                    unitId: n.unitId || selectedUnitId,
-                    courseId: n.courseId || selectedCourseId
-                }));
-                startQuizSession(quizNotes);
-            });
-        });
-
-        list.appendChild(row);
-    });
-};
-
-const startQuizSession = (notes) => {
-    if (notes.length === 0) {
-        alert('Bu kriterlere uygun tekrar edilecek not bulunamadı.');
-        return;
-    }
-    quizQueue = notes.sort(() => 0.5 - Math.random()); // Shuffle notes
-    currentQuizIndex = 0;
-    displayCurrentQuizQuestion();
-};
-
-
-backToUnitsBtn.addEventListener('click', () => showUnitsView(selectedCourseId, selectedCourseName));
-backToCoursesBtn.addEventListener('click', showCoursesView);
-
-// --- UI Rendering ---
-
-const renderCourseCard = (courseId, course) => {
-    const courseElement = document.createElement('div');
-    courseElement.classList.add('course-card');
-    courseElement.dataset.courseId = courseId;
-
-    courseElement.innerHTML = `
-        <div class="course-card-header">
-            <span class="course-name">${course.name}</span>
-            <div class="card-actions">
-                <button class="action-btn edit-course-btn" title="Dersi Düzenle">${editIconSVG}</button>
-                <button class="action-btn delete-course-btn" title="Dersi Sil">${deleteIconSVG}</button>
-            </div>
         </div>
-        <div class="course-stats">
-             <div class="stat-item loading">
-                <span>Üniteler</span>
-                <span class="stat-value">...</span>
+
+
+
+        <div id="notes-container" style="display: none;">
+
+            <div class="notes-header">
+
+                 <button id="back-to-units-btn" class="secondary-btn">&larr; Geri</button>
+
+                 <div class="header-content">
+
+                    <h2 id="selected-unit-title"></h2>
+
+                    <div id="notes-stats-display" class="unit-stats"></div>
+
+                 </div>
+
+                 <button id="show-add-note-form-btn" class="primary-btn">+ Yeni Not Ekle</button>
+
             </div>
-            <div class="stat-item loading">
-                <span>Notlar</span>
-                <span class="stat-value">...</span>
+
+           
+
+            <div id="add-note-container" style="display: none;">
+
+                <div id="add-note-form">
+
+                    <textarea id="note-text-input" placeholder="Öğrenilecek bilgiyi buraya yazın..." rows="4"></textarea>
+
+                    <div class="keyword-section">
+
+                        <b>Seçilen Anahtar Kelime:</b>
+
+                        <span id="selected-keyword-display">Henüz seçilmedi. (Metinden seçin)</span>
+
+                    </div>
+
+                    <input type="text" id="note-category-input" placeholder="Kategori seçin veya yeni yazın..." list="categories-datalist">
+
+                    <datalist id="categories-datalist"></datalist>
+
+                    <div class="add-note-actions">
+
+                        <button id="add-note-btn" class="primary-btn">Notu Kaydet</button>
+
+                        <button id="cancel-add-note-btn" class="secondary-btn">İptal</button>
+
+                    </div>
+
+                </div>
+
             </div>
+
+            
+            <!-- KATEGORİ QUIZ BÖLÜMÜ - YENİ -->
+            <div id="category-quiz-section" style="display:none;">
+                <div class="category-quiz-toggle" id="category-quiz-toggle">
+                    <div class="category-quiz-toggle-left">
+                        <span>📂</span>
+                        <h3>Kategoriye Göre Test</h3>
+                        <span class="category-quiz-toggle-meta" id="category-quiz-count"></span>
+                    </div>
+                    <span class="category-quiz-arrow" id="category-quiz-arrow">▼</span>
+                </div>
+                <div class="category-quiz-body" id="category-quiz-body">
+                    <div id="category-quiz-list" class="category-quiz-list"></div>
+                </div>
+            </div>
+
+
+            <div id="notes-view">
+
+                <div class="notes-section" id="unmemorized-section">
+
+                    <div class="section-header">
+
+                        <h3>Ezberlenmemiş</h3>
+
+                        <input type="search" id="search-unmemorized" class="search-input" placeholder="Ara...">
+
+                    </div>
+
+                    <div class="batch-review-controls">
+
+                        <div class="batch-options">
+
+                            <button class="batch-btn" data-type="10" data-status="Ezberlenmemiş">10 Not Test Et</button>
+
+                            <button class="batch-btn" data-type="20" data-status="Ezberlenmemiş">20 Not Test Et</button>
+
+                            <button class="batch-btn" data-type="50" data-status="Ezberlenmemiş">50 Not Test Et</button>
+
+                            <button class="batch-btn" data-type="all" data-status="Ezberlenmemiş">Tümünü Test Et</button>
+
+                        </div>
+
+                    </div>
+
+                    <div id="unmemorized-notes-list" class="notes-list-column"></div>
+
+                </div>
+
+                <div class="notes-section" id="memorized-section">
+
+                    <div class="section-header">
+
+                        <h3>Ezberlenmiş</h3>
+
+                        <input type="search" id="search-memorized" class="search-input" placeholder="Ara...">
+
+                    </div>
+
+                    <div class="batch-review-controls">
+
+                        <div class="batch-options">
+
+                            <button class="batch-btn" data-type="critical" data-status="Ezberlenmiş">Kritik Notlar (%50 Altı)</button>
+
+                            <button class="batch-btn" data-type="10" data-status="Ezberlenmiş">10 Not Tekrar Et</button>
+
+                            <button class="batch-btn" data-type="all" data-status="Ezberlenmiş">Tümünü Tekrar Et</button>
+
+                        </div>
+
+                    </div>
+
+                    <div id="memorized-notes-list" class="notes-list-column"></div>
+
+                </div>
+
+            </div>
+
         </div>
-    `;
-
-    courseElement.addEventListener('click', (e) => {
-        if (e.target.closest('.action-btn')) return;
-        showUnitsView(courseId, course.name);
-    });
-
-    courseElement.querySelector('.delete-course-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteCourse(courseId);
-    });
-
-    // TODO: Add edit course functionality
-    // courseElement.querySelector('.edit-course-btn').addEventListener('click', (e) => {
-    //     e.stopPropagation();
-    //     openEditModal('course', courseId, course);
-    // });
-
-    coursesListDiv.appendChild(courseElement);
-
-    // Asynchronously fetch stats
-    getCourseStats(courseId).then(stats => {
-        const existingCard = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
-        if (existingCard) {
-            const statsDiv = existingCard.querySelector('.course-stats');
-            statsDiv.innerHTML = `
-                <div class="stat-item">
-                    <span>Üniteler</span>
-                    <span class="stat-value">${stats.units}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Notlar</span>
-                    <span class="stat-value">${stats.notes}</span>
-                </div>
-            `;
-        }
-    });
-};
-
-const updateCourseCard = (courseId, course) => {
-    const courseElement = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
-    if (courseElement) {
-        const courseNameEl = courseElement.querySelector('.course-name');
-        if (courseNameEl) {
-            courseNameEl.textContent = course.name;
-        }
-    }
-};
-
-const removeCourseCard = (courseId) => {
-    const courseElement = coursesListDiv.querySelector(`[data-course-id="${courseId}"]`);
-    if (courseElement) {
-        courseElement.remove();
-    }
-};
-
-const displayCourses = () => {
-    coursesListDiv.innerHTML = '';
-    
-    // CACHE'DEN OKU
-    Object.values(localCache.courses).forEach(course => {
-        renderCourseCard(course.id, course);
-    });
-};
 
 
-const renderUnitCard = (unitId, unit) => {
-    const unitElement = document.createElement('div');
-    unitElement.classList.add('unit-item');
-    unitElement.dataset.unitId = unitId; // Add a data attribute for easy selection
 
-    // Initially render the card with a loading state for stats
-    unitElement.innerHTML = `
-        <div class="unit-item-header">
-            <span class="unit-name">${unit.name}</span>
-            <div class="card-actions">
-                <button class="action-btn edit-unit-btn" title="Üniteyi Düzenle">${editIconSVG}</button>
-                <button class="action-btn delete-unit-btn" title="Üniteyi Sil">${deleteIconSVG}</button>
-            </div>
+        <div id="quiz-container" style="display: none;">
+
+            <h2 id="quiz-question"></h2>
+
+            <div id="quiz-options"></div>
+
+            <p id="quiz-feedback"></p>
+
         </div>
-        <div class="unit-stats">
-             <div class="stat-item loading">
-                <span>Toplam</span>
-                <span class="stat-value"></span>
-            </div>
-            <div class="stat-item loading">
-                <span>Ezberlenmiş</span>
-                <span class="stat-value"></span>
-            </div>
-            <div class="stat-item loading">
-                <span>Ezberlenmemiş</span>
-                <span class="stat-value"></span>
-            </div>
+
+    </main>
+
+
+
+    <!-- Modal for editing -->
+
+    <div id="edit-modal" class="modal" style="display: none;">
+
+        <div class="modal-content">
+
+            <span class="close-btn">&times;</span>
+
+            <h3 id="modal-title">Düzenle</h3>
+
+            <textarea id="modal-textarea" rows="4"></textarea>
+
+            <button id="modal-save-btn" class="primary-btn">Kaydet</button>
+
         </div>
-    `;
 
-    // Add event listeners
-    unitElement.addEventListener('click', (e) => {
-        if (e.target.closest('.action-btn')) return;
-        showNotesView(unitId, unit.name);
-    });
-
-    unitElement.querySelector('.delete-unit-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        deleteUnit(selectedCourseId, unitId);
-    });
-
-    unitElement.querySelector('.edit-unit-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        openEditModal('unit', unitId, unit);
-    });
-
-    unitsListDiv.appendChild(unitElement);
-
-    // Asynchronously fetch stats and update the card
-    getUnitStats(selectedCourseId, unitId).then(stats => {
-        // Make sure the card is still in the DOM
-        const existingCard = unitsListDiv.querySelector(`[data-unit-id="${unitId}"]`);
-        if (existingCard) {
-            const statsDiv = existingCard.querySelector('.unit-stats');
-            statsDiv.innerHTML = `
-                <div class="stat-item">
-                    <span>Toplam</span>
-                    <span class="stat-value">${stats.total}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Ezberlenmiş</span>
-                    <span class="stat-value">${stats.memorized}</span>
-                </div>
-                <div class="stat-item">
-                    <span>Ezberlenmemiş</span>
-                    <span class="stat-value">${stats.unmemorized}</span>
-                </div>
-            `;
-        }
-    });
-};
-
-const updateUnitCard = (unitId, unit) => {
-    const unitElement = unitsListDiv.querySelector(`[data-unit-id="${unitId}"]`);
-    if (unitElement) {
-        const unitNameEl = unitElement.querySelector('.unit-name');
-        if (unitNameEl) {
-            unitNameEl.textContent = unit.name;
-        }
-    }
-};
-
-const removeUnitCard = (unitId) => {
-    const unitElement = unitsListDiv.querySelector(`[data-unit-id="${unitId}"]`);
-    if (unitElement) {
-        unitElement.remove();
-    }
-};
-
-let unsubscribeUnits = null;
-
-const displayUnits = (courseId) => {
-    if (unsubscribeUnits) {
-        unsubscribeUnits();
-    }
-    unitsListDiv.innerHTML = '';
-
-    // CACHE'DEN OKU
-    const units = localCache.units[courseId] || {};
-    Object.values(units).forEach(unit => {
-        renderUnitCard(unit.id, unit);
-    });
-};
-
-addCourseBtn.addEventListener('click', async () => {
-    const courseName = courseNameInput.value.trim();
-    if (courseName) {
-        try {
-            await addDoc(collection(db, 'courses'), {
-                name: courseName,
-                createdAt: new Date()
-            });
-            courseNameInput.value = ''; 
-        } catch (error) {
-            console.error("Error adding course: ", error);
-        }
-    }
-});
-
-addUnitBtn.addEventListener('click', async () => {
-    const unitName = unitNameInput.value.trim();
-    if (unitName && selectedCourseId) {
-        try {
-            await addDoc(collection(db, `courses/${selectedCourseId}/units`), {
-                name: unitName,
-                createdAt: new Date()
-            });
-            unitNameInput.value = ''; 
-        } catch (error) {
-            console.error("Error adding unit: ", error);
-        }
-    }
-});
-
-// --- App Initialization ---
-const initializeApp = async () => {
-    console.log("🚀 Uygulama başlatılıyor...");
-    
-    // İLK ÖNCE TÜM VERİYİ ÇEK
-    await loadAllDataOnce();
-    
-    // Cache yüklendikten sonra bunlar cache'den çalışır
-    loadCourseNameMap();
-    displayCourses();
-    showCoursesView();
-    await displayStreak(); // Yeni gün sıfırlama burada yapılıyor
-    
-    console.log("✅ Uygulama hazır!");
-};
+    </div>
 
 
-// --- Initial Load ---
-initializeApp();
+
+    <!-- Modal for AI Chat -->
+
+    <div id="ai-chat-modal" class="modal" style="display: none;">
+
+        <div class="modal-content">
+
+            <span class="close-btn">&times;</span>
+
+            <h3>Yapay Zeka Asistanı</h3>
+
+            <div id="ai-chat-history"></div>
+
+            <div id="ai-chat-input-container">
+
+                <textarea id="ai-chat-input" placeholder="Bu not hakkında bir soru sor..." rows="2"></textarea>
+
+                <button id="ai-send-btn" class="primary-btn">Gönder</button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <script type="module" src="app.js"></script>
+
+</body>
+
+</html>
