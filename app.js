@@ -920,7 +920,6 @@ const displayNotes = async (unitId) => {
         if (note.status === 'Ezberlenmemiş') {
             actionsHtml = `
                 <button class="test-unmemorized-btn secondary-btn">Test Et</button>
-                <button class="mark-memorized-btn primary-btn">Ezberledim</button>
             `;
             const correct = note.testCorrectCount || 0;
             const incorrect = note.testIncorrectCount || 0;
@@ -941,7 +940,6 @@ const displayNotes = async (unitId) => {
                 ${statsHtml}
             </div>
             <div class="note-info">
-                 <p><b>Durum:</b> ${note.status}</p>
                  <div class="actions">
                     ${actionsHtml}
                 </div>
@@ -1264,10 +1262,14 @@ const renderCategoryQuizSection = (notesArray) => {
     if (countLabel) countLabel.textContent = `${categories.length} kategori`;
     list.innerHTML = '';
 
-    // Toggle davranışı — her render'da yeniden bağla
-    const toggle = document.getElementById('category-quiz-toggle');
+    // Her render'da kapalı başlat
     const body = document.getElementById('category-quiz-body');
     const arrow = document.getElementById('category-quiz-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    // Toggle davranışı — her render'da yeniden bağla
+    const toggle = document.getElementById('category-quiz-toggle');
     if (toggle && body && arrow) {
         const newToggle = toggle.cloneNode(true); // eski listener'ları temizle
         toggle.parentNode.replaceChild(newToggle, toggle);
@@ -1302,7 +1304,7 @@ const renderCategoryQuizSection = (notesArray) => {
                 <span class="category-quiz-name">${cat}</span>
                 <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
             </div>
-            <div class="category-quiz-actions">
+            <div class="category-quiz-actions batch-options">
                 ${buttonsHtml}
             </div>
         `;
@@ -1328,10 +1330,7 @@ const renderCategoryQuizSection = (notesArray) => {
 };
 
 const startQuizSession = (notes) => {
-    if (notes.length === 0) {
-        alert('Bu kriterlere uygun tekrar edilecek not bulunamadı.');
-        return;
-    }
+    if (notes.length === 0) return;
     quizQueue = notes.sort(() => 0.5 - Math.random()); // Shuffle notes
     currentQuizIndex = 0;
     displayCurrentQuizQuestion();
