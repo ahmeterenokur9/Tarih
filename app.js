@@ -886,7 +886,11 @@ const displayNotes = async (unitId) => {
     
     // CACHE'DEN OKU (Firebase'e gitme!)
     const notesObj = localCache.notes[selectedCourseId]?.[unitId] || {};
-    const notesArray = Object.values(notesObj);
+    const notesArray = Object.values(notesObj).map(n => ({
+        ...n,
+        unitId: unitId,
+        courseId: selectedCourseId
+    }));
     
     const categories = new Set();
     let unmemorizedCount = 0;
@@ -1008,6 +1012,9 @@ const displayNotes = async (unitId) => {
     if (unmemorizedCount === 0 && totalCount > 0) {
         unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
     }
+
+    // KATEGORİ QUIZ BÖLÜMÜNÜ RENDER ET
+    renderCategoryQuizSection(notesArray);
 };
 
 addNoteBtn.addEventListener('click', async () => {
@@ -1229,6 +1236,72 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
 
     currentQuizIndex++;
     setTimeout(displayCurrentQuizQuestion, 1500);
+};
+
+// --- KATEGORİ QUIZ ---
+
+const renderCategoryQuizSection = (notesArray) => {
+    const section = document.getElementById('category-quiz-section');
+    const list = document.getElementById('category-quiz-list');
+    if (!section || !list) return;
+
+    // Kategorilere göre notları grupla
+    const categoryMap = {};
+    notesArray.forEach(note => {
+        const cat = note.category || 'Kategorisiz';
+        if (!categoryMap[cat]) categoryMap[cat] = [];
+        categoryMap[cat].push(note);
+    });
+
+    const categories = Object.keys(categoryMap);
+    if (categories.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = '';
+
+    categories.sort().forEach(cat => {
+        const notes = categoryMap[cat];
+        const total = notes.length;
+        const memorized = notes.filter(n => n.status === 'Ezberlenmiş').length;
+        const unmemorized = total - memorized;
+
+        const row = document.createElement('div');
+        row.className = 'category-quiz-row';
+        row.innerHTML = `
+            <div class="category-quiz-info">
+                <span class="category-quiz-name">${cat}</span>
+                <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
+            </div>
+            <div class="category-quiz-actions">
+                <button class="batch-btn cat-quiz-btn" data-category="${cat}" data-count="all">Tümünü Test Et</button>
+                <button class="batch-btn cat-quiz-btn" data-category="${cat}" data-count="10">10 Soru</button>
+            </div>
+        `;
+
+        // Butonlara event listener ekle
+        row.querySelectorAll('.cat-quiz-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const count = btn.dataset.count;
+                let selected = [...notes];
+                selected.sort(() => 0.5 - Math.random());
+                if (count !== 'all') {
+                    selected = selected.slice(0, parseInt(count));
+                }
+                // Her nota courseId ve unitId ekle (quiz için gerekli)
+                const quizNotes = selected.map(n => ({
+                    ...n,
+                    unitId: n.unitId || selectedUnitId,
+                    courseId: n.courseId || selectedCourseId
+                }));
+                startQuizSession(quizNotes);
+            });
+        });
+
+        list.appendChild(row);
+    });
 };
 
 const startQuizSession = (notes) => {
