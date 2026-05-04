@@ -1107,8 +1107,10 @@ const renderWeakNotesSection = (notesArray) => {
         return;
     }
 
+    const toShow = withStats.slice(0, 50);
+
     section.style.display = 'block';
-    if (countLabel) countLabel.textContent = `${withStats.length} not`;
+    if (countLabel) countLabel.textContent = `${toShow.length} not`;
     list.innerHTML = '';
 
     const body = document.getElementById('weak-notes-body');
@@ -1125,9 +1127,6 @@ const renderWeakNotesSection = (notesArray) => {
             document.getElementById('weak-notes-arrow').classList.toggle('open', isOpen);
         });
     }
-
-    // En fazla 50 zayıf not göster
-    const toShow = withStats.slice(0, 50);
 
     // Quiz butonları
     const quizBar = document.createElement('div');
