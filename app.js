@@ -1289,24 +1289,88 @@ const displayCurrentQuizQuestion = async () => {
         await updateStreak(quizQueue); // Update streak with the number of questions answered
         await displayStreak(); // Refresh the display
         
-        quizQuestion.innerHTML = `Test Tamamlandı!`;
-        quizOptions.innerHTML = `<p>${quizQueue.length} sorudan ${quizQueue.filter(n => n.correct).length} tanesini doğru cevapladınız.</p>`;
         quizFeedback.innerHTML = '';
-        quizFeedback.className = ''; // Bug Fix: Clear color from the last question's feedback
+        quizFeedback.className = '';
 
-        // Add a button to go back
-        const backButton = document.createElement('button');
-        backButton.textContent = 'Geri Dön';
-        backButton.className = 'primary-btn';
-        backButton.onclick = () => {
-            if (selectedUnitId) { // This means quiz was for a specific unit
+        const totalQ = quizQueue.length;
+        const correctQ = quizQueue.filter(n => n.correct).length;
+        const wrongNotes = quizQueue.filter(n => !n.correct);
+        const wrongCount = wrongNotes.length;
+
+        quizQuestion.innerHTML = `Test Tamamlandı!`;
+
+        const goBack = () => {
+            if (selectedUnitId) {
                 showNotesView(selectedUnitId, selectedUnitName);
-            } else if (selectedCourseId) { // This means it was a random course quiz
+            } else if (selectedCourseId) {
                 showUnitsView(selectedCourseId, selectedCourseName);
             } else {
                 showCoursesView();
             }
         };
+
+        let resultHTML = `
+            <div style="margin-bottom:16px;">
+                <p style="font-size:1.1rem;margin-bottom:8px;">
+                    <b>${totalQ}</b> sorudan <b style="color:#22c55e">${correctQ}</b> doğru,
+                    <b style="color:#ef4444">${wrongCount}</b> yanlış.
+                </p>
+            </div>
+        `;
+
+        if (wrongCount > 0) {
+            resultHTML += `
+                <div id="wrong-review-section" style="margin-bottom:16px;">
+                    <button id="toggle-wrong-btn" class="secondary-btn" style="margin-bottom:10px;">
+                        ❌ ${wrongCount} Yanlışı Gözden Geçir
+                    </button>
+                    <div id="wrong-notes-list" style="display:none;"></div>
+                </div>
+            `;
+        }
+
+        quizOptions.innerHTML = resultHTML;
+
+        if (wrongCount > 0) {
+            const toggleBtn = document.getElementById('toggle-wrong-btn');
+            const wrongList = document.getElementById('wrong-notes-list');
+
+            wrongNotes.forEach((note, idx) => {
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    background:var(--card-bg-color);
+                    border:1px solid var(--border-color);
+                    border-left:3px solid #ef4444;
+                    border-radius:8px;
+                    padding:12px 14px;
+                    margin-bottom:8px;
+                `;
+                card.innerHTML = `
+                    <p style="font-size:0.78rem;color:var(--secondary-text-color,#888);margin-bottom:4px;">Soru ${idx + 1}</p>
+                    <p style="font-weight:600;margin-bottom:6px;">${note.noteText?.substring(0, 120)}${note.noteText?.length > 120 ? '...' : ''}</p>
+                    <p style="font-size:0.82rem;">
+                        <b>Doğru Cevap:</b>
+                        <span style="color:#22c55e;font-weight:600;">${note.keyword}</span>
+                    </p>
+                    ${note.category ? `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);margin-top:4px;">Kategori: ${note.category}</p>` : ''}
+                `;
+                wrongList.appendChild(card);
+            });
+
+            toggleBtn.addEventListener('click', () => {
+                const isOpen = wrongList.style.display === 'block';
+                wrongList.style.display = isOpen ? 'none' : 'block';
+                toggleBtn.textContent = isOpen
+                    ? `❌ ${wrongCount} Yanlışı Gözden Geçir`
+                    : `▲ Kapat`;
+            });
+        }
+
+        const backButton = document.createElement('button');
+        backButton.textContent = 'Geri Dön';
+        backButton.className = 'primary-btn';
+        backButton.style.marginTop = '8px';
+        backButton.onclick = goBack;
         quizOptions.appendChild(backButton);
         return;
     }
