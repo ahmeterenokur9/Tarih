@@ -945,8 +945,9 @@ textarea:focus {
 
 
 
-/* ===== KATEGORİ QUIZ BÖLÜMÜ ===== */
-#category-quiz-section {
+/* ===== KATEGORİ QUIZ & ZAYIF NOTLAR ORTAK TOGGLE ===== */
+#category-quiz-section,
+#weak-notes-section {
     margin: 16px 0 8px 0;
     background: var(--card-bg-color);
     border: 1px solid var(--border-color);
@@ -985,12 +986,12 @@ textarea:focus {
 
 .category-quiz-toggle-meta {
     font-size: 0.75rem;
-    color: var(--secondary-btn-bg);
+    color: var(--secondary-text-color, #888);
 }
 
 .category-quiz-arrow {
     font-size: 0.8rem;
-    color: var(--secondary-btn-bg);
+    color: var(--secondary-text-color, #888);
     transition: transform 0.2s;
     flex-shrink: 0;
 }
@@ -1048,7 +1049,7 @@ textarea:focus {
 
 .category-quiz-meta {
     font-size: 0.73rem;
-    color: var(--secondary-btn-bg);
+    color: var(--secondary-text-color, #888);
 }
 
 .category-quiz-actions {
@@ -1056,6 +1057,99 @@ textarea:focus {
     gap: 6px;
     flex-shrink: 0;
     flex-wrap: wrap;
+}
+
+/* ===== ZAYIF NOT KARTLARI ===== */
+.weak-note-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.weak-note-rank {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--secondary-text-color, #888);
+    min-width: 28px;
+    padding-top: 2px;
+    flex-shrink: 0;
+}
+
+.weak-note-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.weak-note-keyword {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    margin-bottom: 3px;
+}
+
+.weak-note-text {
+    font-size: 0.78rem;
+    color: var(--secondary-text-color, #888);
+    line-height: 1.4;
+    margin-bottom: 3px;
+}
+
+.weak-note-meta {
+    font-size: 0.72rem;
+    color: var(--secondary-text-color, #888);
+    opacity: 0.7;
+}
+
+.weak-note-stats {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 5px;
+    flex-shrink: 0;
+    min-width: 100px;
+}
+
+.weak-stat-bar-wrap {
+    width: 100px;
+    height: 5px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.weak-stat-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s;
+}
+
+.weak-stat-numbers {
+    display: flex;
+    gap: 6px;
+    font-size: 0.72rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.weak-correct {
+    color: #22c55e;
+    font-weight: 600;
+}
+
+.weak-incorrect {
+    color: #ef4444;
+    font-weight: 600;
+}
+
+.weak-rate {
+    font-weight: 700;
+    font-size: 0.72rem;
 }
 
 @media (max-width: 600px) {
@@ -1069,5 +1163,15 @@ textarea:focus {
     .category-quiz-actions .batch-btn {
         flex: 1;
         text-align: center;
+    }
+    .weak-note-card {
+        flex-wrap: wrap;
+    }
+    .weak-note-stats {
+        width: 100%;
+        align-items: flex-start;
+    }
+    .weak-stat-bar-wrap {
+        width: 100%;
     }
 }
