@@ -114,7 +114,7 @@ const resetAddNoteForm = () => {
 };
 
 // --- Streak Management ---
-const DAILY_GOAL = 200;
+const DAILY_GOAL = 100;
 
 const COURSE_DAILY_MINIMUMS = { 
     "28osYiGGSkK2uONL2k1a": 20,
@@ -886,11 +886,7 @@ const displayNotes = async (unitId) => {
     
     // CACHE'DEN OKU (Firebase'e gitme!)
     const notesObj = localCache.notes[selectedCourseId]?.[unitId] || {};
-    const notesArray = Object.values(notesObj).map(n => ({
-        ...n,
-        unitId: unitId,
-        courseId: selectedCourseId
-    }));
+    const notesArray = Object.values(notesObj).map(n => ({ ...n, unitId: unitId, courseId: selectedCourseId }));
     
     const categories = new Set();
     let unmemorizedCount = 0;
@@ -1011,8 +1007,83 @@ const displayNotes = async (unitId) => {
         unmemorizedNotesListDiv.innerHTML = '<p>Tüm notlar ezberlenmiş!</p>';
     }
 
-    // KATEGORİ QUIZ BÖLÜMÜNÜ RENDER ET
     renderCategoryQuizSection(notesArray);
+};
+
+// --- KATEGORİ QUIZ ---
+const renderCategoryQuizSection = (notesArray) => {
+    const section = document.getElementById('category-quiz-section');
+    const list = document.getElementById('category-quiz-list');
+    const countLabel = document.getElementById('category-quiz-count');
+    if (!section || !list) return;
+
+    const categoryMap = {};
+    notesArray.forEach(note => {
+        const cat = note.category || 'Kategorisiz';
+        if (!categoryMap[cat]) categoryMap[cat] = [];
+        categoryMap[cat].push(note);
+    });
+
+    const categories = Object.keys(categoryMap);
+    if (categories.length === 0) { section.style.display = 'none'; return; }
+
+    section.style.display = 'block';
+    if (countLabel) countLabel.textContent = `${categories.length} kategori`;
+    list.innerHTML = '';
+
+    // Her render'da kapalı başlat
+    const body = document.getElementById('category-quiz-body');
+    const arrow = document.getElementById('category-quiz-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    const toggle = document.getElementById('category-quiz-toggle');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('category-quiz-arrow').classList.toggle('open', isOpen);
+        });
+    }
+
+    categories.sort().forEach(cat => {
+        const notes = categoryMap[cat];
+        const total = notes.length;
+        const memorized = notes.filter(n => n.status === 'Ezberlenmiş').length;
+        const unmemorized = total - memorized;
+
+        const countOptions = [
+            { label: 'Tümünü Test Et', value: 'all' },
+            { label: '10 Soru', value: '10' },
+            { label: '20 Soru', value: '20' },
+        ];
+
+        const buttonsHtml = countOptions.map(o =>
+            `<button class="batch-btn cat-quiz-btn" data-count="${o.value}">${o.label}</button>`
+        ).join('');
+
+        const row = document.createElement('div');
+        row.className = 'category-quiz-row';
+        row.innerHTML = `
+            <div class="category-quiz-info">
+                <span class="category-quiz-name">${cat}</span>
+                <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
+            </div>
+            <div class="category-quiz-actions batch-options">${buttonsHtml}</div>
+        `;
+
+        row.querySelectorAll('.cat-quiz-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const count = btn.dataset.count;
+                let selected = [...notes].sort(() => 0.5 - Math.random());
+                if (count !== 'all') selected = selected.slice(0, parseInt(count));
+                startQuizSession(selected);
+            });
+        });
+
+        list.appendChild(row);
+    });
 };
 
 addNoteBtn.addEventListener('click', async () => {
@@ -1128,24 +1199,94 @@ const displayCurrentQuizQuestion = async () => {
         await updateStreak(quizQueue); // Update streak with the number of questions answered
         await displayStreak(); // Refresh the display
         
-        quizQuestion.innerHTML = `Test Tamamlandı!`;
-        quizOptions.innerHTML = `<p>${quizQueue.length} sorudan ${quizQueue.filter(n => n.correct).length} tanesini doğru cevapladınız.</p>`;
         quizFeedback.innerHTML = '';
-        quizFeedback.className = ''; // Bug Fix: Clear color from the last question's feedback
+        quizFeedback.className = '';
 
-        // Add a button to go back
-        const backButton = document.createElement('button');
-        backButton.textContent = 'Geri Dön';
-        backButton.className = 'primary-btn';
-        backButton.onclick = () => {
-            if (selectedUnitId) { // This means quiz was for a specific unit
+        const totalQ = quizQueue.length;
+        const correctQ = quizQueue.filter(n => n.correct).length;
+        const wrongNotes = quizQueue.filter(n => !n.correct);
+        const wrongCount = wrongNotes.length;
+
+        quizQuestion.innerHTML = `Test Tamamlandı!`;
+
+        // Geri dön fonksiyonu
+        const goBack = () => {
+            if (selectedUnitId) {
                 showNotesView(selectedUnitId, selectedUnitName);
-            } else if (selectedCourseId) { // This means it was a random course quiz
+            } else if (selectedCourseId) {
                 showUnitsView(selectedCourseId, selectedCourseName);
             } else {
                 showCoursesView();
             }
         };
+
+        // Sonuç özeti
+        let resultHTML = `
+            <div style="margin-bottom:16px;">
+                <p style="font-size:1.1rem;margin-bottom:8px;">
+                    <b>${totalQ}</b> sorudan <b style="color:var(--correct-color,#22c55e)">${correctQ}</b> doğru,
+                    <b style="color:var(--incorrect-color,#ef4444)">${wrongCount}</b> yanlış.
+                </p>
+            </div>
+        `;
+
+        // Yanlış notlar varsa gözden geçirme paneli
+        if (wrongCount > 0) {
+            resultHTML += `
+                <div id="wrong-review-section" style="margin-bottom:16px;">
+                    <button id="toggle-wrong-btn" class="secondary-btn" style="margin-bottom:10px;">
+                        ❌ ${wrongCount} Yanlışı Gözden Geçir
+                    </button>
+                    <div id="wrong-notes-list" style="display:none;"></div>
+                </div>
+            `;
+        }
+
+        quizOptions.innerHTML = resultHTML;
+
+        // Yanlışları toggle et
+        if (wrongCount > 0) {
+            const toggleBtn = document.getElementById('toggle-wrong-btn');
+            const wrongList = document.getElementById('wrong-notes-list');
+
+            // Yanlış notları listele
+            wrongNotes.forEach((note, idx) => {
+                const card = document.createElement('div');
+                card.style.cssText = `
+                    background:var(--card-bg-color);
+                    border:1px solid var(--border-color);
+                    border-left: 3px solid var(--incorrect-color, #ef4444);
+                    border-radius:8px;
+                    padding:12px 14px;
+                    margin-bottom:8px;
+                `;
+                card.innerHTML = `
+                    <p style="font-size:0.78rem;color:var(--secondary-text-color,#888);margin-bottom:4px;">Soru ${idx + 1}</p>
+                    <p style="font-weight:600;margin-bottom:6px;">${note.noteText?.substring(0, 120)}${note.noteText?.length > 120 ? '...' : ''}</p>
+                    <p style="font-size:0.82rem;">
+                        <b>Doğru Cevap:</b>
+                        <span style="color:var(--correct-color,#22c55e);font-weight:600;">${note.keyword}</span>
+                    </p>
+                    ${note.category ? `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);margin-top:4px;">Kategori: ${note.category}</p>` : ''}
+                `;
+                wrongList.appendChild(card);
+            });
+
+            toggleBtn.addEventListener('click', () => {
+                const isOpen = wrongList.style.display === 'block';
+                wrongList.style.display = isOpen ? 'none' : 'block';
+                toggleBtn.textContent = isOpen
+                    ? `❌ ${wrongCount} Yanlışı Gözden Geçir`
+                    : `▲ Kapat`;
+            });
+        }
+
+        // Geri dön butonu
+        const backButton = document.createElement('button');
+        backButton.textContent = 'Geri Dön';
+        backButton.className = 'primary-btn';
+        backButton.style.marginTop = '8px';
+        backButton.onclick = goBack;
         quizOptions.appendChild(backButton);
         return;
     }
@@ -1234,99 +1375,6 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
 
     currentQuizIndex++;
     setTimeout(displayCurrentQuizQuestion, 1500);
-};
-
-// --- KATEGORİ QUIZ ---
-
-const renderCategoryQuizSection = (notesArray) => {
-    const section = document.getElementById('category-quiz-section');
-    const list = document.getElementById('category-quiz-list');
-    const countLabel = document.getElementById('category-quiz-count');
-    if (!section || !list) return;
-
-    // Kategorilere göre notları grupla
-    const categoryMap = {};
-    notesArray.forEach(note => {
-        const cat = note.category || 'Kategorisiz';
-        if (!categoryMap[cat]) categoryMap[cat] = [];
-        categoryMap[cat].push(note);
-    });
-
-    const categories = Object.keys(categoryMap);
-    if (categories.length === 0) {
-        section.style.display = 'none';
-        return;
-    }
-
-    section.style.display = 'block';
-    if (countLabel) countLabel.textContent = `${categories.length} kategori`;
-    list.innerHTML = '';
-
-    // Her render'da kapalı başlat
-    const body = document.getElementById('category-quiz-body');
-    const arrow = document.getElementById('category-quiz-arrow');
-    if (body) body.classList.remove('open');
-    if (arrow) arrow.classList.remove('open');
-
-    // Toggle davranışı — her render'da yeniden bağla
-    const toggle = document.getElementById('category-quiz-toggle');
-    if (toggle && body && arrow) {
-        const newToggle = toggle.cloneNode(true); // eski listener'ları temizle
-        toggle.parentNode.replaceChild(newToggle, toggle);
-        newToggle.addEventListener('click', () => {
-            const isOpen = body.classList.toggle('open');
-            document.getElementById('category-quiz-arrow').classList.toggle('open', isOpen);
-        });
-    }
-
-    categories.sort().forEach(cat => {
-        const notes = categoryMap[cat];
-        const total = notes.length;
-        const memorized = notes.filter(n => n.status === 'Ezberlenmiş').length;
-        const unmemorized = total - memorized;
-
-        const row = document.createElement('div');
-        row.className = 'category-quiz-row';
-
-        // Seçenek sayılarını nota göre filtrele (mevcut nota kadar göster)
-        const countOptions = [
-            { label: 'Tümünü Test Et', value: 'all' },
-            { label: '10 Soru', value: '10' },
-            { label: '20 Soru', value: '20' },
-        ].filter(o => o.value === 'all' || parseInt(o.value) <= total || total > 0);
-
-        const buttonsHtml = countOptions.map(o =>
-            `<button class="batch-btn cat-quiz-btn" data-count="${o.value}">${o.label}</button>`
-        ).join('');
-
-        row.innerHTML = `
-            <div class="category-quiz-info">
-                <span class="category-quiz-name">${cat}</span>
-                <span class="category-quiz-meta">${total} not · ${memorized} ezberlenmiş · ${unmemorized} ezberlenmemiş</span>
-            </div>
-            <div class="category-quiz-actions batch-options">
-                ${buttonsHtml}
-            </div>
-        `;
-
-        row.querySelectorAll('.cat-quiz-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const count = btn.dataset.count;
-                let selected = [...notes].sort(() => 0.5 - Math.random());
-                if (count !== 'all') {
-                    selected = selected.slice(0, parseInt(count)); // not sayısı azsa hepsini alır
-                }
-                const quizNotes = selected.map(n => ({
-                    ...n,
-                    unitId: n.unitId || selectedUnitId,
-                    courseId: n.courseId || selectedCourseId
-                }));
-                startQuizSession(quizNotes);
-            });
-        });
-
-        list.appendChild(row);
-    });
 };
 
 const startQuizSession = (notes) => {
