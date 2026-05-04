@@ -1141,7 +1141,7 @@ const renderWeakNotesSection = (notesArray) => {
     quizBar.querySelectorAll('.weak-quiz-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const count = btn.dataset.count;
-            let selected = [...withStats].sort(() => 0.5 - Math.random());
+            let selected = [...toShow].sort(() => 0.5 - Math.random());
             if (count !== 'all') selected = selected.slice(0, parseInt(count));
             startQuizSession(selected);
         });
