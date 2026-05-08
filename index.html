@@ -143,6 +143,37 @@
 
             <div id="units-list"></div>
 
+            <!-- DERS GENELİ ARAMA -->
+            <div id="course-search-section" style="display:none;margin-top:16px;">
+                <div class="category-quiz-toggle" id="course-search-toggle">
+                    <div class="category-quiz-toggle-left">
+                        <span>🔍</span>
+                        <h3>Derste Not Ara</h3>
+                        <span class="category-quiz-toggle-meta" id="course-search-result-count"></span>
+                    </div>
+                    <span class="category-quiz-arrow" id="course-search-arrow">▼</span>
+                </div>
+                <div class="category-quiz-body" id="course-search-body">
+                    <input type="search" id="course-search-input" class="search-input" placeholder="Anahtar kelime veya not metninde ara..." style="width:100%;margin:12px 0 10px 0;">
+                    <div id="course-search-results" class="course-search-results"></div>
+                </div>
+            </div>
+
+            <!-- DERS GENELİ ZAYIF NOTLAR -->
+            <div id="course-weak-notes-section" style="display:none;margin-top:12px;">
+                <div class="category-quiz-toggle" id="course-weak-toggle">
+                    <div class="category-quiz-toggle-left">
+                        <span>🔴</span>
+                        <h3>Dersin En Zayıf Notları</h3>
+                        <span class="category-quiz-toggle-meta" id="course-weak-count"></span>
+                    </div>
+                    <span class="category-quiz-arrow" id="course-weak-arrow">▼</span>
+                </div>
+                <div class="category-quiz-body" id="course-weak-body">
+                    <div id="course-weak-list"></div>
+                </div>
+            </div>
+
         </div>
 
 
