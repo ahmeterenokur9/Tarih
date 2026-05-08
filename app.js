@@ -1261,6 +1261,201 @@ const showUnitsView = (courseId, courseName) => {
         unsubscribeNotes = null;
     }
     displayUnits(courseId);
+    renderCourseWeakNotes(courseId);
+    renderCourseSearch(courseId);
+};
+
+// --- DERS GENELİ ZAYIF NOTLAR ---
+const renderCourseWeakNotes = (courseId) => {
+    const section = document.getElementById('course-weak-notes-section');
+    const list = document.getElementById('course-weak-list');
+    const countLabel = document.getElementById('course-weak-count');
+    if (!section || !list) return;
+
+    // Tüm ünitelerin notlarını topla
+    const allNotes = [];
+    const unitsObj = localCache.notes[courseId] || {};
+    for (const unitId in unitsObj) {
+        const unitName = localCache.units[courseId]?.[unitId]?.name || '';
+        for (const noteId in unitsObj[unitId]) {
+            allNotes.push({ ...unitsObj[unitId][noteId], unitId, courseId, _unitName: unitName });
+        }
+    }
+
+    const withStats = allNotes
+        .filter(n => (n.testIncorrectCount || 0) > 0)
+        .map(n => {
+            const correct = n.testCorrectCount || 0;
+            const incorrect = n.testIncorrectCount || 0;
+            const errorRate = incorrect / (correct + incorrect);
+            return { ...n, _errorRate: errorRate, _correct: correct, _incorrect: incorrect };
+        })
+        .sort((a, b) => b._errorRate - a._errorRate);
+
+    if (withStats.length === 0) { section.style.display = 'none'; return; }
+
+    const toShow = withStats.slice(0, 50);
+    section.style.display = 'block';
+    if (countLabel) countLabel.textContent = `${toShow.length} not`;
+
+    const body = document.getElementById('course-weak-body');
+    const arrow = document.getElementById('course-weak-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    const toggle = document.getElementById('course-weak-toggle');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('course-weak-arrow').classList.toggle('open', isOpen);
+        });
+    }
+
+    // Quiz butonları
+    const quizBtnsHtml = `
+        <div class="batch-options" style="margin:12px 0 10px 0;display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="batch-btn course-weak-quiz-btn" data-count="10">10 Soru</button>
+            <button class="batch-btn course-weak-quiz-btn" data-count="20">20 Soru</button>
+            <button class="batch-btn course-weak-quiz-btn" data-count="all">Tümünü Test Et</button>
+        </div>
+    `;
+
+    list.innerHTML = quizBtnsHtml;
+
+    list.querySelectorAll('.course-weak-quiz-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const count = btn.dataset.count;
+            let selected = [...toShow].sort(() => 0.5 - Math.random());
+            if (count !== 'all') selected = selected.slice(0, parseInt(count));
+            startQuizSession(selected);
+        });
+    });
+
+    toShow.forEach((note, idx) => {
+        const errorPct = Math.round(note._errorRate * 100);
+        const barColor = errorPct >= 70 ? '#ef4444' : errorPct >= 40 ? '#f97316' : '#eab308';
+        const card = document.createElement('div');
+        card.className = 'weak-note-card';
+        card.innerHTML = `
+            <div class="weak-note-rank">#${idx + 1}</div>
+            <div class="weak-note-info">
+                <div class="weak-note-keyword">${note.keyword || '-'}</div>
+                <div class="weak-note-text">${(note.noteText || '').substring(0, 90)}${(note.noteText || '').length > 90 ? '...' : ''}</div>
+                <div class="weak-note-meta">${note._unitName}${note.category ? ' · ' + note.category : ''}</div>
+            </div>
+            <div class="weak-note-stats">
+                <div class="weak-stat-numbers">
+                    <span class="weak-correct">✓ ${note._correct}</span>
+                    <span class="weak-incorrect">✗ ${note._incorrect}</span>
+                    <span class="weak-rate" style="color:${barColor}">%${errorPct} hata</span>
+                </div>
+                <div class="weak-stat-bar-wrap">
+                    <div class="weak-stat-bar" style="width:${errorPct}%;background:${barColor};"></div>
+                </div>
+            </div>
+        `;
+        list.appendChild(card);
+    });
+};
+
+// --- DERS GENELİ ARAMA ---
+const renderCourseSearch = (courseId) => {
+    const section = document.getElementById('course-search-section');
+    const input = document.getElementById('course-search-input');
+    const results = document.getElementById('course-search-results');
+    const countLabel = document.getElementById('course-search-result-count');
+    if (!section || !input || !results) return;
+
+    section.style.display = 'block';
+    results.innerHTML = '';
+    if (countLabel) countLabel.textContent = '';
+    input.value = '';
+
+    const body = document.getElementById('course-search-body');
+    const arrow = document.getElementById('course-search-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    const toggle = document.getElementById('course-search-toggle');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('course-search-arrow').classList.toggle('open', isOpen);
+            if (isOpen) {
+                setTimeout(() => document.getElementById('course-search-input')?.focus(), 150);
+            }
+        });
+    }
+
+    // Arama fonksiyonu
+    const doSearch = (query) => {
+        const q = query.trim().toLowerCase();
+        results.innerHTML = '';
+        if (!q) { if (countLabel) countLabel.textContent = ''; return; }
+
+        const matches = [];
+        const unitsObj = localCache.notes[courseId] || {};
+        for (const unitId in unitsObj) {
+            const unitName = localCache.units[courseId]?.[unitId]?.name || '';
+            for (const noteId in unitsObj[unitId]) {
+                const note = unitsObj[unitId][noteId];
+                const haystack = `${note.keyword || ''} ${note.noteText || ''} ${note.category || ''}`.toLowerCase();
+                if (haystack.includes(q)) {
+                    matches.push({ ...note, _unitName: unitName });
+                }
+            }
+        }
+
+        if (countLabel) countLabel.textContent = matches.length > 0 ? `${matches.length} sonuç` : 'Sonuç yok';
+
+        if (matches.length === 0) {
+            results.innerHTML = `<p style="color:var(--secondary-text-color,#888);font-size:0.85rem;padding:8px 0;">Sonuç bulunamadı.</p>`;
+            return;
+        }
+
+        matches.slice(0, 60).forEach(note => {
+            const card = document.createElement('div');
+            card.style.cssText = `
+                background:var(--bg-color);
+                border:1px solid var(--border-color);
+                border-radius:8px;
+                padding:10px 14px;
+                margin-bottom:8px;
+            `;
+            const keyword = note.keyword || '';
+            const noteText = note.noteText || '';
+            // Eşleşen kısmı highlight et
+            const highlight = (text, q) => text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:#facc15;color:#1a1a1a;border-radius:2px;padding:0 2px;">$1</mark>');
+            card.innerHTML = `
+                <div style="font-weight:700;font-size:0.9rem;margin-bottom:3px;">${highlight(keyword, q)}</div>
+                <div style="font-size:0.78rem;color:var(--secondary-text-color,#888);line-height:1.4;margin-bottom:3px;">${highlight(noteText.substring(0, 120), q)}${noteText.length > 120 ? '...' : ''}</div>
+                <div style="font-size:0.72rem;color:var(--secondary-text-color,#888);opacity:0.75;">${note._unitName}${note.category ? ' · ' + note.category : ''}</div>
+            `;
+            results.appendChild(card);
+        });
+
+        if (matches.length > 60) {
+            results.innerHTML += `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);text-align:center;">... ve ${matches.length - 60} sonuç daha. Aramayı daraltın.</p>`;
+        }
+    };
+
+    // Input event'i body açıkken bağla (toggle açıldığında yeniden bağlar)
+    const bindInput = () => {
+        const inp = document.getElementById('course-search-input');
+        if (inp) {
+            inp.oninput = (e) => doSearch(e.target.value);
+        }
+    };
+
+    // Toggle açıldığında input'u bağla
+    const newToggle = document.getElementById('course-search-toggle');
+    if (newToggle) {
+        newToggle.addEventListener('click', bindInput);
+    }
 };
 
 const showCoursesView = () => {
