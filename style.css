@@ -1175,3 +1175,29 @@ textarea:focus {
         width: 100%;
     }
 }
+
+
+/* ===== DERS GENELİ ARAMA ===== */
+#course-search-section,
+#course-weak-notes-section {
+    margin: 12px 0 8px 0;
+    background: var(--card-bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: background-color 0.3s, border-color 0.3s;
+}
+
+.course-search-results {
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.course-search-results::-webkit-scrollbar {
+    width: 5px;
+}
+.course-search-results::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
