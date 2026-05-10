@@ -1201,3 +1201,159 @@ textarea:focus {
     background: var(--border-color);
     border-radius: 4px;
 }
+
+
+/* ===== AYARLAR BUTONU ===== */
+.settings-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 7px 9px;
+    cursor: pointer;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+
+.settings-btn:hover {
+    background: var(--card-bg-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+/* ===== AYARLAR MODAL ===== */
+.settings-modal-content {
+    max-width: 540px;
+    width: 95%;
+    max-height: 88vh;
+    overflow-y: auto;
+}
+
+.settings-section {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-top: 16px;
+    background: var(--bg-color);
+}
+
+.settings-section-title {
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+    color: var(--text-color);
+}
+
+.settings-section-desc {
+    font-size: 0.8rem;
+    color: var(--secondary-text-color, #888);
+    margin-bottom: 14px;
+    line-height: 1.5;
+}
+
+.settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.settings-row-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-color);
+}
+
+.settings-row-desc {
+    font-size: 0.75rem;
+    color: var(--secondary-text-color, #888);
+    margin-top: 2px;
+}
+
+/* ===== IMPORT FORM ===== */
+.import-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.import-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-color);
+    margin-top: 4px;
+}
+
+.import-select {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 0.88rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.import-select:focus {
+    border-color: var(--primary-color);
+}
+
+.import-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.import-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--card-bg-color);
+    color: var(--text-color);
+    font-size: 0.8rem;
+    font-family: 'Courier New', monospace;
+    resize: vertical;
+    outline: none;
+    line-height: 1.5;
+    transition: border-color 0.15s;
+}
+
+.import-textarea:focus {
+    border-color: var(--primary-color);
+}
+
+.import-status {
+    font-size: 0.82rem;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.import-status-info {
+    background: rgba(59,130,246,0.1);
+    color: #3b82f6;
+    border: 1px solid rgba(59,130,246,0.3);
+}
+
+.import-status-success {
+    background: rgba(34,197,94,0.1);
+    color: #22c55e;
+    border: 1px solid rgba(34,197,94,0.3);
+}
+
+.import-status-error {
+    background: rgba(239,68,68,0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.3);
+}
+
+.import-status-warning {
+    background: rgba(234,179,8,0.1);
+    color: #ca8a04;
+    border: 1px solid rgba(234,179,8,0.3);
+}
