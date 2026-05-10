@@ -31,21 +31,63 @@
     <div id="header-streak-display" class="header-streak"></div>
 </div>
 
-        <div class="theme-switcher">
-
-            <span>Karanlık Mod</span>
-
-            <label class="switch">
-
-                <input type="checkbox" id="theme-toggle">
-
-                <span class="slider round"></span>
-
-            </label>
-
-        </div>
+        <button id="settings-btn" class="settings-btn" title="Ayarlar">
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+            </svg>
+        </button>
 
     </header>
+
+    <!-- AYARLAR MODAL -->
+    <div id="settings-modal" class="modal" style="display:none;">
+        <div class="modal-content settings-modal-content">
+            <span class="close-btn" id="settings-close-btn">&times;</span>
+            <h3>⚙️ Ayarlar</h3>
+
+            <!-- Karanlık Mod -->
+            <div class="settings-section">
+                <div class="settings-row">
+                    <div>
+                        <div class="settings-row-title">Karanlık Mod</div>
+                        <div class="settings-row-desc">Arayüz temasını değiştir</div>
+                    </div>
+                    <label class="switch">
+                        <input type="checkbox" id="theme-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- JSON Not İçe Aktarma -->
+            <div class="settings-section">
+                <div class="settings-section-title">📥 JSON'dan Not İçe Aktar</div>
+                <p class="settings-section-desc">Hazır JSON formatındaki notları seçili ders ve üniteye toplu ekle.</p>
+
+                <div class="import-form">
+                    <label class="import-label">Ders Seç</label>
+                    <select id="import-course-select" class="import-select">
+                        <option value="">-- Ders seçin --</option>
+                    </select>
+
+                    <label class="import-label">Ünite Seç</label>
+                    <select id="import-unit-select" class="import-select" disabled>
+                        <option value="">-- Önce ders seçin --</option>
+                    </select>
+
+                    <label class="import-label">JSON İçeriği</label>
+                    <textarea id="import-json-input" class="import-textarea" rows="8" placeholder='[&#10;  {&#10;    "category": "Kişi",&#10;    "keyword": "Örnek Anahtar Kelime",&#10;    "noteText": "Örnek not metni içinde Örnek Anahtar Kelime geçmeli.",&#10;    "status": "Ezberlenmemiş"&#10;  }&#10;]'></textarea>
+
+                    <div id="import-status" class="import-status" style="display:none;"></div>
+
+                    <button id="import-btn" class="primary-btn" style="width:100%;margin-top:8px;" disabled>
+                        İçe Aktar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
 
