@@ -1405,7 +1405,7 @@ const renderCourseSearch = (courseId) => {
                 const note = unitsObj[unitId][noteId];
                 const haystack = `${note.keyword || ''} ${note.noteText || ''} ${note.category || ''}`.toLowerCase();
                 if (haystack.includes(q)) {
-                    matches.push({ ...note, _unitName: unitName });
+                    matches.push({ ...note, _unitName: unitName, _unitId: unitId });
                 }
             }
         }
@@ -1417,29 +1417,56 @@ const renderCourseSearch = (courseId) => {
             return;
         }
 
+        const hl = (text, q) => (text || '').replace(
+            new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+            '<mark style="background:#facc15;color:#1a1a1a;border-radius:2px;padding:0 2px;">$1</mark>'
+        );
+
         matches.slice(0, 60).forEach(note => {
+            const correct = note.testCorrectCount || 0;
+            const incorrect = note.testIncorrectCount || 0;
+            const isMemorized = note.status === 'Ezberlenmiş';
+
+            const displayText = (note.noteText || '').replace(
+                new RegExp(`(${(note.keyword || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
+                `<b>$1</b>`
+            );
+
             const card = document.createElement('div');
-            card.style.cssText = `
-                background:var(--bg-color);
-                border:1px solid var(--border-color);
-                border-radius:8px;
-                padding:10px 14px;
-                margin-bottom:8px;
-            `;
-            const keyword = note.keyword || '';
-            const noteText = note.noteText || '';
-            // Eşleşen kısmı highlight et
-            const highlight = (text, q) => text.replace(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark style="background:#facc15;color:#1a1a1a;border-radius:2px;padding:0 2px;">$1</mark>');
+            card.className = 'note-item';
+            card.style.marginBottom = '10px';
+
+            const statsHtml = !isMemorized ? `
+                <div class="note-learning-stats">
+                    <span><b>Doğru:</b> ${correct}</span>
+                    <span><b>Yanlış:</b> ${incorrect}</span>
+                </div>` : '';
+
+            const actionBtn = isMemorized
+                ? `<button class="cs-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel || 0}%</p>`
+                : `<button class="cs-quiz-btn secondary-btn">Test Et</button>`;
+
             card.innerHTML = `
-                <div style="font-weight:700;font-size:0.9rem;margin-bottom:3px;">${highlight(keyword, q)}</div>
-                <div style="font-size:0.78rem;color:var(--secondary-text-color,#888);line-height:1.4;margin-bottom:3px;">${highlight(noteText.substring(0, 120), q)}${noteText.length > 120 ? '...' : ''}</div>
-                <div style="font-size:0.72rem;color:var(--secondary-text-color,#888);opacity:0.75;">${note._unitName}${note.category ? ' · ' + note.category : ''}</div>
+                <div class="note-content">
+                    <p>${hl(displayText, q)}</p>
+                    <span class="category">${hl(note.category || '', q)}</span>
+                    <span style="font-size:0.72rem;color:var(--secondary-text-color,#888);margin-left:6px;">📁 ${note._unitName}</span>
+                    ${statsHtml}
+                </div>
+                <div class="note-info">
+                    <div class="actions">${actionBtn}</div>
+                </div>
             `;
+
+            card.querySelector('.cs-quiz-btn').addEventListener('click', () => {
+                startQuizSession([{ ...note, unitId: note._unitId, courseId }]);
+            });
+
             results.appendChild(card);
         });
 
         if (matches.length > 60) {
-            results.innerHTML += `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);text-align:center;">... ve ${matches.length - 60} sonuç daha. Aramayı daraltın.</p>`;
+            results.innerHTML += `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);text-align:center;margin-top:8px;">... ve ${matches.length - 60} sonuç daha. Aramayı daraltın.</p>`;
         }
     };
 
