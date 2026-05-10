@@ -425,13 +425,150 @@ const setTheme = (theme) => {
 };
 
 themeToggle.addEventListener('change', () => {
-    const newTheme = themeToggle.checked ? 'dark' : 'light';
-    setTheme(newTheme);
+    setTheme(themeToggle.checked ? 'dark' : 'light');
 });
 
-// Check for saved theme preference
 const savedTheme = localStorage.getItem('theme') || 'light';
 setTheme(savedTheme);
+
+// --- Settings Modal ---
+const settingsBtn = document.getElementById('settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const settingsCloseBtn = document.getElementById('settings-close-btn');
+
+settingsBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'flex';
+    populateImportCourseSelect();
+});
+
+settingsCloseBtn.addEventListener('click', () => {
+    settingsModal.style.display = 'none';
+});
+
+settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) settingsModal.style.display = 'none';
+});
+
+// --- JSON Import ---
+const importCourseSelect = document.getElementById('import-course-select');
+const importUnitSelect = document.getElementById('import-unit-select');
+const importJsonInput = document.getElementById('import-json-input');
+const importBtn = document.getElementById('import-btn');
+const importStatus = document.getElementById('import-status');
+
+const populateImportCourseSelect = () => {
+    importCourseSelect.innerHTML = '<option value="">-- Ders seçin --</option>';
+    const coursesObj = localCache.courses || {};
+    Object.entries(coursesObj).forEach(([id, course]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = course.name;
+        importCourseSelect.appendChild(opt);
+    });
+    importUnitSelect.innerHTML = '<option value="">-- Önce ders seçin --</option>';
+    importUnitSelect.disabled = true;
+    importBtn.disabled = true;
+};
+
+importCourseSelect.addEventListener('change', () => {
+    const courseId = importCourseSelect.value;
+    importUnitSelect.innerHTML = '<option value="">-- Ünite seçin --</option>';
+    importUnitSelect.disabled = !courseId;
+    importBtn.disabled = true;
+    if (!courseId) return;
+    const unitsObj = localCache.units[courseId] || {};
+    Object.entries(unitsObj).forEach(([id, unit]) => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = unit.name;
+        importUnitSelect.appendChild(opt);
+    });
+});
+
+importUnitSelect.addEventListener('change', () => {
+    importBtn.disabled = !importUnitSelect.value;
+});
+
+const showImportStatus = (msg, type) => {
+    importStatus.style.display = 'block';
+    importStatus.textContent = msg;
+    importStatus.className = `import-status import-status-${type}`;
+};
+
+importBtn.addEventListener('click', async () => {
+    const courseId = importCourseSelect.value;
+    const unitId = importUnitSelect.value;
+    const jsonText = importJsonInput.value.trim();
+
+    if (!courseId || !unitId || !jsonText) return;
+
+    let notes;
+    try {
+        notes = JSON.parse(jsonText);
+        if (!Array.isArray(notes)) throw new Error('JSON bir dizi olmalı.');
+    } catch (e) {
+        showImportStatus('❌ Geçersiz JSON: ' + e.message, 'error');
+        return;
+    }
+
+    // Validasyon
+    const invalid = notes.filter(n => !n.keyword || !n.noteText || !n.category);
+    if (invalid.length > 0) {
+        showImportStatus(`❌ ${invalid.length} notta keyword, noteText veya category eksik.`, 'error');
+        return;
+    }
+
+    importBtn.disabled = true;
+    importBtn.textContent = 'Ekleniyor...';
+    showImportStatus(`⏳ ${notes.length} not Firebase'e yazılıyor...`, 'info');
+
+    const now = new Date();
+    let successCount = 0;
+    let errorCount = 0;
+
+    if (!localCache.notes[courseId]) localCache.notes[courseId] = {};
+    if (!localCache.notes[courseId][unitId]) localCache.notes[courseId][unitId] = {};
+
+    for (const note of notes) {
+        try {
+            const newNote = {
+                noteText: note.noteText,
+                keyword: note.keyword,
+                category: note.category,
+                status: note.status || 'Ezberlenmemiş',
+                confidenceLevel: note.confidenceLevel || 0,
+                createdAt: now,
+                lastReviewedAt: now,
+                decayLastAppliedAt: now,
+                testCorrectCount: note.testCorrectCount || 0,
+                testIncorrectCount: note.testIncorrectCount || 0,
+            };
+            const docRef = await addDoc(collection(db, `courses/${courseId}/units/${unitId}/notes`), newNote);
+            newNote.id = docRef.id;
+            localCache.notes[courseId][unitId][docRef.id] = newNote;
+            successCount++;
+            showImportStatus(`⏳ ${successCount}/${notes.length} not eklendi...`, 'info');
+        } catch (e) {
+            console.error('Not eklenemedi:', e);
+            errorCount++;
+        }
+    }
+
+    importBtn.disabled = false;
+    importBtn.textContent = 'İçe Aktar';
+    importJsonInput.value = '';
+
+    if (errorCount === 0) {
+        showImportStatus(`✅ ${successCount} not başarıyla eklendi!`, 'success');
+    } else {
+        showImportStatus(`⚠️ ${successCount} not eklendi, ${errorCount} hata oluştu.`, 'warning');
+    }
+
+    // Eğer şu an aynı ünite açıksa yenile
+    if (selectedCourseId === courseId && selectedUnitId === unitId) {
+        displayNotes(unitId);
+    }
+});
 
 
 // --- Modal Management ---
