@@ -1491,6 +1491,8 @@ const displayCurrentQuizQuestion = async () => {
         const correctQ = quizQueue.filter(n => n.correct).length;
         const wrongNotes = quizQueue.filter(n => !n.correct);
         const wrongCount = wrongNotes.length;
+        const flaggedNotes = quizQueue.filter(n => n.flagged);
+        const flaggedCount = flaggedNotes.length;
 
         quizQuestion.innerHTML = `Test Tamamlandı!`;
 
@@ -1509,6 +1511,7 @@ const displayCurrentQuizQuestion = async () => {
                 <p style="font-size:1.1rem;margin-bottom:8px;">
                     <b>${totalQ}</b> sorudan <b style="color:#22c55e">${correctQ}</b> doğru,
                     <b style="color:#ef4444">${wrongCount}</b> yanlış.
+                    ${flaggedCount > 0 ? `<b style="color:#f97316"> · 🚩 ${flaggedCount} işaretli</b>` : ''}
                 </p>
             </div>
         `;
@@ -1524,29 +1527,31 @@ const displayCurrentQuizQuestion = async () => {
             `;
         }
 
+        if (flaggedCount > 0) {
+            resultHTML += `
+                <div id="flagged-review-section" style="margin-bottom:16px;">
+                    <button id="toggle-flagged-btn" class="secondary-btn" style="margin-bottom:10px;">
+                        🚩 ${flaggedCount} İşaretli Soruyu Gözden Geçir
+                    </button>
+                    <div id="flagged-notes-list" style="display:none;"></div>
+                </div>
+            `;
+        }
+
         quizOptions.innerHTML = resultHTML;
 
+        // Yanlışları render et
         if (wrongCount > 0) {
             const toggleBtn = document.getElementById('toggle-wrong-btn');
             const wrongList = document.getElementById('wrong-notes-list');
 
             wrongNotes.forEach((note, idx) => {
                 const card = document.createElement('div');
-                card.style.cssText = `
-                    background:var(--card-bg-color);
-                    border:1px solid var(--border-color);
-                    border-left:3px solid #ef4444;
-                    border-radius:8px;
-                    padding:12px 14px;
-                    margin-bottom:8px;
-                `;
+                card.style.cssText = `background:var(--card-bg-color);border:1px solid var(--border-color);border-left:3px solid #ef4444;border-radius:8px;padding:12px 14px;margin-bottom:8px;`;
                 card.innerHTML = `
                     <p style="font-size:0.78rem;color:var(--secondary-text-color,#888);margin-bottom:4px;">Soru ${idx + 1}</p>
                     <p style="font-weight:600;margin-bottom:6px;">${note.noteText?.substring(0, 120)}${note.noteText?.length > 120 ? '...' : ''}</p>
-                    <p style="font-size:0.82rem;">
-                        <b>Doğru Cevap:</b>
-                        <span style="color:#22c55e;font-weight:600;">${note.keyword}</span>
-                    </p>
+                    <p style="font-size:0.82rem;"><b>Doğru Cevap:</b> <span style="color:#22c55e;font-weight:600;">${note.keyword}</span></p>
                     ${note.category ? `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);margin-top:4px;">Kategori: ${note.category}</p>` : ''}
                 `;
                 wrongList.appendChild(card);
@@ -1555,9 +1560,35 @@ const displayCurrentQuizQuestion = async () => {
             toggleBtn.addEventListener('click', () => {
                 const isOpen = wrongList.style.display === 'block';
                 wrongList.style.display = isOpen ? 'none' : 'block';
-                toggleBtn.textContent = isOpen
-                    ? `❌ ${wrongCount} Yanlışı Gözden Geçir`
-                    : `▲ Kapat`;
+                toggleBtn.textContent = isOpen ? `❌ ${wrongCount} Yanlışı Gözden Geçir` : `▲ Kapat`;
+            });
+        }
+
+        // İşaretlileri render et
+        if (flaggedCount > 0) {
+            const toggleFlaggedBtn = document.getElementById('toggle-flagged-btn');
+            const flaggedList = document.getElementById('flagged-notes-list');
+
+            flaggedNotes.forEach((note, idx) => {
+                const isWrong = !note.correct;
+                const card = document.createElement('div');
+                card.style.cssText = `background:var(--card-bg-color);border:1px solid var(--border-color);border-left:3px solid #f97316;border-radius:8px;padding:12px 14px;margin-bottom:8px;`;
+                card.innerHTML = `
+                    <p style="font-size:0.78rem;color:var(--secondary-text-color,#888);margin-bottom:4px;">
+                        İşaretli ${idx + 1}
+                        ${isWrong ? '<span style="color:#ef4444;margin-left:6px;">· Yanlış</span>' : '<span style="color:#22c55e;margin-left:6px;">· Doğru</span>'}
+                    </p>
+                    <p style="font-weight:600;margin-bottom:6px;">${note.noteText?.substring(0, 120)}${note.noteText?.length > 120 ? '...' : ''}</p>
+                    <p style="font-size:0.82rem;"><b>Cevap:</b> <span style="color:#f97316;font-weight:600;">${note.keyword}</span></p>
+                    ${note.category ? `<p style="font-size:0.75rem;color:var(--secondary-text-color,#888);margin-top:4px;">Kategori: ${note.category}</p>` : ''}
+                `;
+                flaggedList.appendChild(card);
+            });
+
+            toggleFlaggedBtn.addEventListener('click', () => {
+                const isOpen = flaggedList.style.display === 'block';
+                flaggedList.style.display = isOpen ? 'none' : 'block';
+                toggleFlaggedBtn.textContent = isOpen ? `🚩 ${flaggedCount} İşaretli Soruyu Gözden Geçir` : `▲ Kapat`;
             });
         }
 
@@ -1579,7 +1610,34 @@ const displayCurrentQuizQuestion = async () => {
     quizOptions.innerHTML = '';
 
     const questionText = noteToTest.noteText.replace(noteToTest.keyword, '_______');
-    quizQuestion.innerHTML = `Soru ${currentQuizIndex + 1} / ${quizQueue.length}<br><br>"${questionText}"`;
+
+    const isFlagged = quizQueue[currentQuizIndex].flagged || false;
+    quizQuestion.innerHTML = `
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <span>Soru ${currentQuizIndex + 1} / ${quizQueue.length}<br><br>"${questionText}"</span>
+            <button id="flag-btn" title="İşaretle" style="
+                flex-shrink:0;
+                background:${isFlagged ? '#f97316' : 'var(--card-bg-color)'};
+                border:1.5px solid ${isFlagged ? '#f97316' : 'var(--border-color)'};
+                color:${isFlagged ? '#fff' : 'var(--text-color)'};
+                border-radius:8px;
+                padding:6px 10px;
+                font-size:1rem;
+                cursor:pointer;
+                transition:all 0.15s;
+                line-height:1;
+            ">🚩</button>
+        </div>
+    `;
+
+    document.getElementById('flag-btn').addEventListener('click', () => {
+        quizQueue[currentQuizIndex].flagged = !quizQueue[currentQuizIndex].flagged;
+        const btn = document.getElementById('flag-btn');
+        const flagged = quizQueue[currentQuizIndex].flagged;
+        btn.style.background = flagged ? '#f97316' : 'var(--card-bg-color)';
+        btn.style.borderColor = flagged ? '#f97316' : 'var(--border-color)';
+        btn.style.color = flagged ? '#fff' : 'var(--text-color)';
+    });
 
     // --- Advanced Distractor Fetching Logic ---
     const distractors = new Set();
