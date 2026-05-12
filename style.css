@@ -1357,3 +1357,58 @@ textarea:focus {
     color: #ca8a04;
     border: 1px solid rgba(234,179,8,0.3);
 }
+
+
+/* ===== FREQUENCY PICKER ===== */
+.freq-picker-wrap {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-color);
+}
+
+.freq-label {
+    font-size: 0.78rem;
+    color: var(--secondary-text-color, #888);
+    display: block;
+    margin-bottom: 7px;
+}
+
+.freq-label b {
+    color: var(--primary-color);
+}
+
+.freq-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.freq-box {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.62rem;
+    font-weight: 500;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--secondary-text-color, #888);
+    transition: all 0.1s;
+}
+
+.freq-box:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--card-bg-color);
+}
+
+.freq-box.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+    font-weight: 700;
+}
