@@ -1066,6 +1066,8 @@ const displayNotes = async (unitId) => {
             actionsHtml = `<button class="start-quiz-btn secondary-btn">Güven Tazelemek İçin Test Et</button><p><b>Güven Seviyesi:</b> ${note.confidenceLevel}%</p>`;
         }
 
+        const freq = note.frequency || 5;
+
         noteElement.innerHTML = `
             <div class="note-content">
                 <p>${displayText}</p>
@@ -1075,6 +1077,14 @@ const displayNotes = async (unitId) => {
             <div class="note-info">
                  <div class="actions">
                     ${actionsHtml}
+                </div>
+                <div class="freq-picker-wrap">
+                    <span class="freq-label">🔁 Sıklık: <b class="freq-val">${freq}</b></span>
+                    <div class="freq-picker" data-note-id="${noteId}" data-current="${freq}">
+                        ${Array.from({length: 50}, (_, i) => i + 1).map(n =>
+                            `<span class="freq-box${n === freq ? ' active' : ''}" data-val="${n}">${n}</span>`
+                        ).join('')}
+                    </div>
                 </div>
             </div>
             <div class="card-actions">
@@ -1106,6 +1116,28 @@ const displayNotes = async (unitId) => {
         noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             openAiChatModal(note.noteText);
+        });
+
+        // Frequency picker
+        noteElement.querySelector('.freq-picker').addEventListener('click', async (e) => {
+            const box = e.target.closest('.freq-box');
+            if (!box) return;
+            const newFreq = parseInt(box.dataset.val);
+            const picker = noteElement.querySelector('.freq-picker');
+            // UI güncelle
+            picker.querySelectorAll('.freq-box').forEach(b => b.classList.remove('active'));
+            box.classList.add('active');
+            noteElement.querySelector('.freq-val').textContent = newFreq;
+            // Cache güncelle
+            if (localCache.notes[selectedCourseId]?.[selectedUnitId]?.[noteId]) {
+                localCache.notes[selectedCourseId][selectedUnitId][noteId].frequency = newFreq;
+            }
+            // Firebase'e yaz
+            try {
+                await updateDoc(doc(db, `courses/${selectedCourseId}/units/${selectedUnitId}/notes`, noteId), { frequency: newFreq });
+            } catch (err) {
+                console.error('Frequency güncellenemedi:', err);
+            }
         });
 
         const markMemorizedBtn = noteElement.querySelector('.mark-memorized-btn');
@@ -1878,9 +1910,30 @@ const handleQuizAnswer = (selectedOption, correctNote) => {
     setTimeout(displayCurrentQuizQuestion, 1500);
 };
 
+const weightedShuffle = (notes) => {
+    // Her notun frequency değeri kadar "bilet" var, yüksek frequency daha sık çıkar
+    const pool = [];
+    notes.forEach(note => {
+        const weight = note.frequency || 5;
+        for (let i = 0; i < weight; i++) pool.push(note);
+    });
+    // Pool'u karıştır, tekrarsız seçim yap
+    pool.sort(() => 0.5 - Math.random());
+    const seen = new Set();
+    const result = [];
+    for (const note of pool) {
+        const id = note.id || note.noteText;
+        if (!seen.has(id)) {
+            seen.add(id);
+            result.push(note);
+        }
+    }
+    return result;
+};
+
 const startQuizSession = (notes) => {
     if (notes.length === 0) return;
-    quizQueue = notes.sort(() => 0.5 - Math.random()); // Shuffle notes
+    quizQueue = weightedShuffle(notes);
     currentQuizIndex = 0;
     displayCurrentQuizQuestion();
 };
