@@ -1,0 +1,51 @@
+// ============================================================
+// TEK SEFERLİK SCRIPT — Tüm notlara frequency: 5 ekle
+// Kullanım: Tarayıcı konsoluna yapıştır (sayfa açıkken)
+// ============================================================
+
+(async () => {
+    const { getFirestore, collection, getDocs, writeBatch, doc } =
+        await import("https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js");
+    const { initializeApp, getApps } =
+        await import("https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js");
+
+    // Mevcut app'i kullan (sayfada zaten başlatılmış)
+    const app = getApps()[0];
+    const db = getFirestore(app);
+
+    const BATCH_SIZE = 499; // Firestore limiti 500
+    let totalUpdated = 0;
+    let batchCount = 0;
+
+    console.log("🚀 Frequency güncelleme başlıyor...");
+
+    const coursesSnap = await getDocs(collection(db, "courses"));
+
+    for (const courseDoc of coursesSnap.docs) {
+        const unitsSnap = await getDocs(collection(db, `courses/${courseDoc.id}/units`));
+
+        for (const unitDoc of unitsSnap.docs) {
+            const notesSnap = await getDocs(
+                collection(db, `courses/${courseDoc.id}/units/${unitDoc.id}/notes`)
+            );
+
+            // frequency alanı olmayanları filtrele
+            const toUpdate = notesSnap.docs.filter(d => d.data().frequency === undefined);
+
+            // 499'luk gruplara böl
+            for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+                const batch = writeBatch(db);
+                const chunk = toUpdate.slice(i, i + BATCH_SIZE);
+                chunk.forEach(noteDoc => {
+                    batch.update(noteDoc.ref, { frequency: 10 });
+                });
+                await batch.commit();
+                totalUpdated += chunk.length;
+                batchCount++;
+                console.log(`✅ Batch ${batchCount} tamamlandı — toplam ${totalUpdated} not güncellendi`);
+            }
+        }
+    }
+
+    console.log(`🎉 Bitti! Toplam ${totalUpdated} nota frequency: 5 eklendi.`);
+})();
