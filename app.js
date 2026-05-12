@@ -537,6 +537,7 @@ importBtn.addEventListener('click', async () => {
                 category: note.category,
                 status: note.status || 'Ezberlenmemiş',
                 confidenceLevel: note.confidenceLevel || 0,
+                frequency: note.frequency || 5,
                 createdAt: now,
                 lastReviewedAt: now,
                 decayLastAppliedAt: now,
