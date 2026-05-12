@@ -1412,3 +1412,26 @@ textarea:focus {
     color: #fff;
     font-weight: 700;
 }
+
+
+/* Freq toggle button */
+.freq-toggle-btn {
+    background: none;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.78rem;
+    color: var(--secondary-text-color, #888);
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 6px;
+}
+
+.freq-toggle-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.freq-toggle-btn b {
+    color: var(--primary-color);
+}
