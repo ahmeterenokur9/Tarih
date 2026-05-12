@@ -1079,8 +1079,8 @@ const displayNotes = async (unitId) => {
                     ${actionsHtml}
                 </div>
                 <div class="freq-picker-wrap">
-                    <span class="freq-label">🔁 Sıklık: <b class="freq-val">${freq}</b></span>
-                    <div class="freq-picker" data-note-id="${noteId}" data-current="${freq}">
+                    <button class="freq-toggle-btn" data-note-id="${noteId}">🔁 Sıklık: <b class="freq-val">${freq}</b></button>
+                    <div class="freq-picker" data-note-id="${noteId}" data-current="${freq}" style="display:none;">
                         ${Array.from({length: 50}, (_, i) => i + 1).map(n =>
                             `<span class="freq-box${n === freq ? ' active' : ''}" data-val="${n}">${n}</span>`
                         ).join('')}
@@ -1116,6 +1116,13 @@ const displayNotes = async (unitId) => {
         noteElement.querySelector('.ai-chat-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             openAiChatModal(note.noteText);
+        });
+
+        // Frequency toggle
+        noteElement.querySelector('.freq-toggle-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const picker = noteElement.querySelector('.freq-picker');
+            picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
         });
 
         // Frequency picker
@@ -1808,21 +1815,38 @@ const displayCurrentQuizQuestion = async () => {
     const questionText = noteToTest.noteText.replace(noteToTest.keyword, '_______');
 
     const isFlagged = quizQueue[currentQuizIndex].flagged || false;
+    const currentFreq = quizQueue[currentQuizIndex].frequency || 5;
+
     quizQuestion.innerHTML = `
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
             <span>Soru ${currentQuizIndex + 1} / ${quizQueue.length}<br><br>"${questionText}"</span>
-            <button id="flag-btn" title="İşaretle" style="
-                flex-shrink:0;
-                background:${isFlagged ? '#f97316' : 'var(--card-bg-color)'};
-                border:1.5px solid ${isFlagged ? '#f97316' : 'var(--border-color)'};
-                color:${isFlagged ? '#fff' : 'var(--text-color)'};
-                border-radius:8px;
-                padding:6px 10px;
-                font-size:1rem;
-                cursor:pointer;
-                transition:all 0.15s;
-                line-height:1;
-            ">🚩</button>
+            <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+                <button id="flag-btn" title="İşaretle" style="
+                    background:${isFlagged ? '#f97316' : 'var(--card-bg-color)'};
+                    border:1.5px solid ${isFlagged ? '#f97316' : 'var(--border-color)'};
+                    color:${isFlagged ? '#fff' : 'var(--text-color)'};
+                    border-radius:8px;padding:6px 10px;font-size:1rem;
+                    cursor:pointer;transition:all 0.15s;line-height:1;
+                ">🚩</button>
+                <button id="quiz-freq-btn" title="Sıklığı ayarla" style="
+                    background:var(--card-bg-color);
+                    border:1.5px solid var(--border-color);
+                    color:var(--text-color);
+                    border-radius:8px;padding:5px 8px;font-size:0.72rem;
+                    cursor:pointer;transition:all 0.15s;line-height:1.4;white-space:nowrap;
+                ">🔁 ${currentFreq}</button>
+            </div>
+        </div>
+        <div id="quiz-freq-picker" style="display:none;margin-top:10px;
+            background:var(--card-bg-color);border:1px solid var(--border-color);
+            border-radius:8px;padding:10px;
+        ">
+            <div style="font-size:0.75rem;color:var(--secondary-text-color,#888);margin-bottom:6px;">Sıklık seç (1-50):</div>
+            <div style="display:flex;flex-wrap:wrap;gap:3px;">
+                ${Array.from({length: 50}, (_, i) => i + 1).map(n =>
+                    `<span class="freq-box${n === currentFreq ? ' active' : ''}" data-val="${n}" style="cursor:pointer;">${n}</span>`
+                ).join('')}
+            </div>
         </div>
     `;
 
@@ -1833,6 +1857,34 @@ const displayCurrentQuizQuestion = async () => {
         btn.style.background = flagged ? '#f97316' : 'var(--card-bg-color)';
         btn.style.borderColor = flagged ? '#f97316' : 'var(--border-color)';
         btn.style.color = flagged ? '#fff' : 'var(--text-color)';
+    });
+
+    document.getElementById('quiz-freq-btn').addEventListener('click', () => {
+        const picker = document.getElementById('quiz-freq-picker');
+        picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+    });
+
+    document.getElementById('quiz-freq-picker').addEventListener('click', async (e) => {
+        const box = e.target.closest('.freq-box');
+        if (!box) return;
+        const newFreq = parseInt(box.dataset.val);
+        const note = quizQueue[currentQuizIndex];
+        // UI güncelle
+        document.querySelectorAll('#quiz-freq-picker .freq-box').forEach(b => b.classList.remove('active'));
+        box.classList.add('active');
+        document.getElementById('quiz-freq-btn').textContent = `🔁 ${newFreq}`;
+        // State güncelle
+        quizQueue[currentQuizIndex].frequency = newFreq;
+        // Cache güncelle
+        if (note.courseId && note.unitId && note.id && localCache.notes[note.courseId]?.[note.unitId]?.[note.id]) {
+            localCache.notes[note.courseId][note.unitId][note.id].frequency = newFreq;
+        }
+        // Firebase'e yaz
+        try {
+            await updateDoc(doc(db, `courses/${note.courseId}/units/${note.unitId}/notes`, note.id), { frequency: newFreq });
+        } catch (err) {
+            console.error('Frequency güncellenemedi:', err);
+        }
     });
 
     // --- Advanced Distractor Fetching Logic ---
