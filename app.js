@@ -4,7 +4,7 @@ import { collection, addDoc, onSnapshot, query, doc, updateDoc, getDocs, where, 
 import { GoogleGenerativeAI } from "https://esm.run/@google/generative-ai";
 
 // --- Gemini AI Config ---
-const GEMINI_API_KEY = "AIzaSyDsPESlU0vnH3I_HQf8bVk3u-dHgXFvhRw";
+const GEMINI_API_KEY = "AIzaSyAALgE91TdjnIcWkty9_fhfZh3mXpSrsac";
 // HATA DÜZELTMESİ: Eski API URL'si kaldırıldı, yerine SDK istemcisi oluşturuldu.
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
@@ -631,7 +631,7 @@ const handleAiChatSend = async () => {
     
     try {
         // HATA DÜZELTMESİ: SDK kullanılarak model ve prompt oluşturuldu.
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
         const prompt = `Şu bilgi notu verildi: "${currentAiChatNote}". kullanıcı kendisi bu notu ekledi ve şimdi sana bir mesajı var mesajını cevapla amacın kullanacının öğrenme yolculuğunda ona yardımcı olmak ve bilgileri ve tarihi akışı öğrenmesini kolaylaştırmak ama uzun ve detaylı olarak değil kısa ve öz olarak cevap vereceksin: "${userInput}"`;
 
         const result = await model.generateContent(prompt);
