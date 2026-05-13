@@ -119,7 +119,10 @@ const DAILY_GOAL = 100;
 const COURSE_DAILY_MINIMUMS = { 
     "28osYiGGSkK2uONL2k1a": 20,
     "Ny9BvgeK5iraMYAvV9RR": 50,
-    "ME0GYyrFQr1Oysycx4vS": 80
+    "ME0GYyrFQr1Oysycx4vS": 80,
+    "gndRxkX7oOf12fcQ2biq": 50
+
+
     
 };
 
