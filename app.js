@@ -1188,7 +1188,6 @@ const displayNotes = async (unitId) => {
     }
 
     renderCategoryQuizSection(notesArray);
-    renderKeywordQuizSection(notesArray);
     renderWeakNotesSection(notesArray);
 };
 
@@ -1261,80 +1260,6 @@ const renderCategoryQuizSection = (notesArray) => {
 
         list.appendChild(row);
     });
-};
-
-// --- ANAHTAR KELİME QUIZ ---
-const renderKeywordQuizSection = (notesArray) => {
-    const section = document.getElementById('keyword-quiz-section');
-    if (!section) return;
-
-    section.style.display = notesArray.length > 0 ? 'block' : 'none';
-
-    const body = document.getElementById('keyword-quiz-body');
-    const arrow = document.getElementById('keyword-quiz-arrow');
-    if (body) body.classList.remove('open');
-    if (arrow) arrow.classList.remove('open');
-
-    const toggle = document.getElementById('keyword-quiz-toggle');
-    if (toggle && body && arrow) {
-        const newToggle = toggle.cloneNode(true);
-        toggle.parentNode.replaceChild(newToggle, toggle);
-        newToggle.addEventListener('click', () => {
-            const isOpen = body.classList.toggle('open');
-            document.getElementById('keyword-quiz-arrow').classList.toggle('open', isOpen);
-            if (isOpen) setTimeout(() => document.getElementById('keyword-quiz-input')?.focus(), 150);
-        });
-    }
-
-    // Input ve butonlara her render'da yeniden bağla
-    const input = document.getElementById('keyword-quiz-input');
-    const resultInfo = document.getElementById('keyword-quiz-result-info');
-    const btnWrap = document.getElementById('keyword-quiz-btn-wrap');
-    if (!input || !resultInfo || !btnWrap) return;
-
-    input.value = '';
-    resultInfo.textContent = '';
-    btnWrap.innerHTML = '';
-
-    let matchedNotes = [];
-
-    const updateResults = () => {
-        const q = input.value.trim().toLowerCase();
-        btnWrap.innerHTML = '';
-        resultInfo.textContent = '';
-        matchedNotes = [];
-
-        if (!q) return;
-
-        matchedNotes = notesArray.filter(n => {
-            const haystack = `${n.keyword || ''} ${n.noteText || ''} ${n.category || ''}`.toLowerCase();
-            return haystack.includes(q);
-        });
-
-        if (matchedNotes.length === 0) {
-            resultInfo.textContent = 'Eşleşen not bulunamadı.';
-            return;
-        }
-
-        resultInfo.textContent = `${matchedNotes.length} not bulundu`;
-
-        const counts = ['10', '20', 'all'];
-        counts.forEach(c => {
-            if (c !== 'all' && parseInt(c) > matchedNotes.length) return;
-            const btn = document.createElement('button');
-            btn.className = 'batch-btn';
-            btn.textContent = c === 'all' ? `Tümünü Test Et (${matchedNotes.length})` : `${c} Soru`;
-            btn.addEventListener('click', () => {
-                let selected = [...matchedNotes].sort(() => 0.5 - Math.random());
-                if (c !== 'all') selected = selected.slice(0, parseInt(c));
-                startQuizSession(selected);
-            });
-            btnWrap.appendChild(btn);
-        });
-    };
-
-    const newInput = document.getElementById('keyword-quiz-input');
-    newInput.addEventListener('input', updateResults);
 };
 
 // --- EN ZAYIF NOTLAR ---
@@ -1518,6 +1443,7 @@ const showUnitsView = (courseId, courseName) => {
     displayUnits(courseId);
     renderCourseWeakNotes(courseId);
     renderCourseSearch(courseId);
+    renderCourseKeywordQuiz(courseId);
 };
 
 // --- DERS GENELİ ZAYIF NOTLAR ---
@@ -1738,6 +1664,97 @@ const renderCourseSearch = (courseId) => {
     if (newToggle) {
         newToggle.addEventListener('click', bindInput);
     }
+};
+
+// --- KELIME/ÖBEK BAZLI TEST ---
+const renderCourseKeywordQuiz = (courseId) => {
+    const section = document.getElementById('course-keyword-quiz-section');
+    const input = document.getElementById('course-keyword-input');
+    const results = document.getElementById('course-keyword-results');
+    const countLabel = document.getElementById('course-keyword-count');
+    if (!section || !input || !results) return;
+
+    section.style.display = 'block';
+    results.innerHTML = '';
+    if (countLabel) countLabel.textContent = '';
+    input.value = '';
+
+    const body = document.getElementById('course-keyword-body');
+    const arrow = document.getElementById('course-keyword-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    const toggle = document.getElementById('course-keyword-toggle');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('course-keyword-arrow').classList.toggle('open', isOpen);
+            if (isOpen) setTimeout(() => document.getElementById('course-keyword-input')?.focus(), 150);
+        });
+    }
+
+    const doSearch = (query) => {
+        const q = query.trim().toLowerCase();
+        results.innerHTML = '';
+        if (countLabel) countLabel.textContent = '';
+
+        if (!q) return;
+
+        const matches = [];
+        const unitsObj = localCache.notes[courseId] || {};
+        for (const unitId in unitsObj) {
+            const unitName = localCache.units[courseId]?.[unitId]?.name || '';
+            for (const noteId in unitsObj[unitId]) {
+                const note = unitsObj[unitId][noteId];
+                const haystack = `${note.keyword || ''} ${note.noteText || ''} ${note.category || ''}`.toLowerCase();
+                if (haystack.includes(q)) {
+                    matches.push({ ...note, _unitName: unitName, _unitId: unitId });
+                }
+            }
+        }
+
+        if (countLabel) countLabel.textContent = matches.length > 0 ? `${matches.length} not bulundu` : 'Sonuç yok';
+
+        if (matches.length === 0) {
+            results.innerHTML = `<p style="color:var(--secondary-text-color,#888);font-size:0.85rem;padding:8px 0;">Bu kelimeyi içeren not bulunamadı.</p>`;
+            return;
+        }
+
+        // Quiz butonları
+        const quizBtnsDiv = document.createElement('div');
+        quizBtnsDiv.className = 'batch-options';
+        quizBtnsDiv.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;';
+
+        const counts = [
+            { label: '10 Soru', val: 10 },
+            { label: '20 Soru', val: 20 },
+            { label: 'Tümünü Test Et', val: 'all' },
+        ];
+
+        counts.forEach(({ label, val }) => {
+            const btn = document.createElement('button');
+            btn.className = 'batch-btn';
+            btn.textContent = label;
+            btn.addEventListener('click', () => {
+                let selected = [...matches].sort(() => 0.5 - Math.random());
+                if (val !== 'all') selected = selected.slice(0, val);
+                startQuizSession(selected.map(n => ({ ...n, unitId: n._unitId, courseId })));
+            });
+            quizBtnsDiv.appendChild(btn);
+        });
+
+        results.appendChild(quizBtnsDiv);
+    };
+
+    const bindInput = () => {
+        const inp = document.getElementById('course-keyword-input');
+        if (inp) inp.oninput = (e) => doSearch(e.target.value);
+    };
+
+    const newToggle = document.getElementById('course-keyword-toggle');
+    if (newToggle) newToggle.addEventListener('click', bindInput);
 };
 
 const showCoursesView = () => {
