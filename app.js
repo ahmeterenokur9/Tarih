@@ -1188,6 +1188,7 @@ const displayNotes = async (unitId) => {
     }
 
     renderCategoryQuizSection(notesArray);
+    renderKeywordQuizSection(notesArray);
     renderWeakNotesSection(notesArray);
 };
 
@@ -1260,6 +1261,80 @@ const renderCategoryQuizSection = (notesArray) => {
 
         list.appendChild(row);
     });
+};
+
+// --- ANAHTAR KELİME QUIZ ---
+const renderKeywordQuizSection = (notesArray) => {
+    const section = document.getElementById('keyword-quiz-section');
+    if (!section) return;
+
+    section.style.display = notesArray.length > 0 ? 'block' : 'none';
+
+    const body = document.getElementById('keyword-quiz-body');
+    const arrow = document.getElementById('keyword-quiz-arrow');
+    if (body) body.classList.remove('open');
+    if (arrow) arrow.classList.remove('open');
+
+    const toggle = document.getElementById('keyword-quiz-toggle');
+    if (toggle && body && arrow) {
+        const newToggle = toggle.cloneNode(true);
+        toggle.parentNode.replaceChild(newToggle, toggle);
+        newToggle.addEventListener('click', () => {
+            const isOpen = body.classList.toggle('open');
+            document.getElementById('keyword-quiz-arrow').classList.toggle('open', isOpen);
+            if (isOpen) setTimeout(() => document.getElementById('keyword-quiz-input')?.focus(), 150);
+        });
+    }
+
+    // Input ve butonlara her render'da yeniden bağla
+    const input = document.getElementById('keyword-quiz-input');
+    const resultInfo = document.getElementById('keyword-quiz-result-info');
+    const btnWrap = document.getElementById('keyword-quiz-btn-wrap');
+    if (!input || !resultInfo || !btnWrap) return;
+
+    input.value = '';
+    resultInfo.textContent = '';
+    btnWrap.innerHTML = '';
+
+    let matchedNotes = [];
+
+    const updateResults = () => {
+        const q = input.value.trim().toLowerCase();
+        btnWrap.innerHTML = '';
+        resultInfo.textContent = '';
+        matchedNotes = [];
+
+        if (!q) return;
+
+        matchedNotes = notesArray.filter(n => {
+            const haystack = `${n.keyword || ''} ${n.noteText || ''} ${n.category || ''}`.toLowerCase();
+            return haystack.includes(q);
+        });
+
+        if (matchedNotes.length === 0) {
+            resultInfo.textContent = 'Eşleşen not bulunamadı.';
+            return;
+        }
+
+        resultInfo.textContent = `${matchedNotes.length} not bulundu`;
+
+        const counts = ['10', '20', 'all'];
+        counts.forEach(c => {
+            if (c !== 'all' && parseInt(c) > matchedNotes.length) return;
+            const btn = document.createElement('button');
+            btn.className = 'batch-btn';
+            btn.textContent = c === 'all' ? `Tümünü Test Et (${matchedNotes.length})` : `${c} Soru`;
+            btn.addEventListener('click', () => {
+                let selected = [...matchedNotes].sort(() => 0.5 - Math.random());
+                if (c !== 'all') selected = selected.slice(0, parseInt(c));
+                startQuizSession(selected);
+            });
+            btnWrap.appendChild(btn);
+        });
+    };
+
+    const newInput = document.getElementById('keyword-quiz-input');
+    newInput.addEventListener('input', updateResults);
 };
 
 // --- EN ZAYIF NOTLAR ---
